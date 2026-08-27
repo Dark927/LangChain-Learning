@@ -101,3 +101,19 @@ This bridge defines when and how the agent must activate specialized skills and 
 1. **Analyze Requirements**: Determine which skill domain(s) apply to the user's prompt using the matrix above.
 2. **Consult Skill Guidelines**: Apply the specific standards (e.g., design patterns from `architecture-design-patterns` + tool error handling from `senior-langchain-llm` + typing from `senior-python-dev`).
 3. **Verify Execution**: Always execute scripts in the terminal to verify runtime behavior before presenting the solution to the user.
+
+---
+
+## 6. Custom Commands (Agent Triggers)
+
+The user may invoke the following custom pseudo-commands in their prompts. When you see these commands, immediately execute the corresponding workflow without asking for permission:
+
+- **`/branch-feat [feature-name]`**:
+  1. Read the `[feature-name]` argument.
+  2. Format it into kebab-case if it isn't already.
+  3. Execute `git checkout -b feature/<feature-name>`.
+  4. Confirm the branch creation to the user.
+
+- **`/branch-bug [bug-name]`**:
+  1. Execute `git checkout -b bugfix/<bug-name>`.
+  2. Confirm the branch creation to the user.
