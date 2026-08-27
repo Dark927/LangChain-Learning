@@ -1,29 +1,42 @@
-"""Model provider module for Groq LLMs.
+"""Model setup module.
 
-Adheres to Single Responsibility Principle (SRP) and Dependency Inversion Principle (DIP):
-Encapsulates chat model creation returning standard BaseChatModel interface.
+Purpose:
+This file is responsible for connecting to the Groq AI service.
+It returns an "AI Model" object that we can use to talk to the AI.
 """
 
+from typing import Any
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models.chat_models import BaseChatModel
 
-# Recommended available Groq models (free tier):
-# - "openai/gpt-oss-120b" (Fast, high capability reasoning)
-# - "qwen/qwen3.8-27b"     (Strong generalist)
-# - "openai/gpt-oss-20b"  (Lightweight & fast)
-# - "qwen/qwen3.6-27b"
-DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
+# --- CONSTANTS ---
+# Groq provides several free models. We specify a highly capable one here.
+DEFAULT_MODEL_NAME = "openai/gpt-oss-120b"
+
+# We must prefix the model name with "groq:" so LangChain knows which company's API to call.
+PROVIDER_PREFIX = "groq:"
 
 
-def get_groq_model(model_name: str = DEFAULT_GROQ_MODEL, **kwargs) -> BaseChatModel:
-    """Initialize and return a Groq chat model via LangChain's init_chat_model.
-
+def create_ai_model(model_name: str = DEFAULT_MODEL_NAME, **config: Any) -> BaseChatModel:
+    """Connects to Groq and creates a Chat Model object.
+    
+    Logic & Purpose:
+    LangChain's 'init_chat_model' is a factory function. It takes a string like 
+    "groq:openai/gpt-oss-120b" and automatically sets up the correct connection 
+    using the API key we loaded in config.py.
+    
     Args:
-        model_name: Name of the model on Groq.
-        **kwargs: Additional parameters passed to init_chat_model (e.g. temperature).
-
+        model_name: The name of the AI model to use.
+        **config: Extra settings (like temperature, which controls creativity).
+        
     Returns:
-        BaseChatModel: Configured chat model instance.
+        BaseChatModel: A ready-to-use AI model object.
     """
-    model_identifier = f"groq:{model_name}" if not model_name.startswith("groq:") else model_name
-    return init_chat_model(model_identifier, **kwargs)
+    # If the user didn't type "groq:" at the start of the name, we add it for them.
+    if not model_name.startswith(PROVIDER_PREFIX):
+        full_model_name = f"{PROVIDER_PREFIX}{model_name}"
+    else:
+        full_model_name = model_name
+        
+    # Create and return the model
+    return init_chat_model(full_model_name, **config)

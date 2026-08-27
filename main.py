@@ -1,142 +1,167 @@
+"""Google AI (Gemini) Agent - Unified File.
+
+Purpose:
+This is a self-contained, beginner-friendly script that builds an AI agent using Google Gemini.
+It includes configuration, tools, model setup, and the running loop all in one file for easy learning.
+"""
+
 import os
 import sys
 import logging
 from pathlib import Path
-from datetime import datetime
+from typing import Any
 from dotenv import load_dotenv
 
-# Ensure UTF-8 output on Windows terminal (avoids UnicodeEncodeError for characters like ⅔)
-if sys.platform == "win32":
+from langchain.chat_models import init_chat_model
+from langchain.agents import create_agent
+from langchain_core.tools import tool
+
+# --- CONSTANTS ---
+# We use constants to avoid "magic numbers" and "magic strings" in our code.
+UTF8 = "utf-8"
+WINDOWS_OS = "win32"
+ENV_FILE = ".env"
+LOG_FOLDER = "logs"
+LOG_FILE = "agent_google.log"
+
+API_KEY_VAR = "GOOGLE_API_KEY"
+GEMINI_MODEL = "google_genai:gemini-3.5-flash-lite"
+# To use the Pro model, you would change the line above to:
+# GEMINI_MODEL = "google_genai:gemini-3.1-pro-preview"
+
+ZERO = 0
+ERROR_DIVIDE_BY_ZERO = "Error: Cannot divide by zero!"
+DIVIDER = "-" * 60
+
+ROLE_USER = "user"
+EXAMPLE_QUESTION = "What is 145 multiplied by 8, then divided by 3?"
+
+
+# ==========================================
+# 1. ENVIRONMENT & LOGGING SETUP
+# ==========================================
+
+# Fix Windows console to support math symbols and special characters
+if sys.platform == WINDOWS_OS:
     try:
-        sys.stdout.reconfigure(encoding="utf-8")
-        sys.stderr.reconfigure(encoding="utf-8")
+        sys.stdout.reconfigure(encoding=UTF8)
+        sys.stderr.reconfigure(encoding=UTF8)
     except Exception:
         pass
 
+# Find our folders automatically
 script_dir = Path(__file__).resolve().parent
-env_path = script_dir / ".env"
-
-# -------------------
-# Logs Setup
-# -------------------
-logs_dir = script_dir / "logs"
+env_path = script_dir / ENV_FILE
+logs_dir = script_dir / LOG_FOLDER
 logs_dir.mkdir(parents=True, exist_ok=True)
 
-log_file = logs_dir / "agent.log"
+# Set up logging to a file
 logging.basicConfig(
-    filename=str(log_file),
+    filename=str(logs_dir / LOG_FILE),
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    encoding="utf-8",
+    encoding=UTF8,
 )
 
-print("Script directory: ", script_dir)
-print("Using .env from: ", env_path)
-
+# Load secret API keys from the .env file
 load_dotenv(dotenv_path=env_path)
+print(f"Google AI API key loaded: {bool(os.getenv(API_KEY_VAR))}")
 
-print("Google AI API key found: ", bool(os.getenv("GOOGLE_API_KEY")))
 
-# -------------------
-# Model
-# -------------------
-
-from langchain.chat_models import init_chat_model
-
-model = init_chat_model("google_genai:gemini-3.5-flash-lite")
-
-# -------------------
-# Tools
-# -------------------
-
-from langchain_core.tools import tool
-
+# ==========================================
+# 2. TOOL DEFINITIONS
+# ==========================================
 
 @tool
 def multiply(a: float, b: float) -> float:
-    """Multiply two numbers together. Use for multiplication operations."""
+    """Multiply two numbers together. Use this when you need to find a product."""
     return a * b
 
 
 @tool
-def divide(a: float, b: float) -> float:
-    """Divide the first number by the second. Returns error if dividing by zero."""
-    if b == 0:
-        return "Error: Cannot divide by zero!"
+def divide(a: float, b: float) -> float | str:
+    """Divide the first number by the second.
+    
+    Logic & Purpose:
+    Returns a string error instead of crashing if the divisor is 0,
+    so the AI can read the error and try something else.
+    """
+    if b == ZERO:
+        return ERROR_DIVIDE_BY_ZERO
     return a / b
 
 
-# -------------------
-# Agents
-# -------------------
-
-from langchain.agents import create_agent
-
-tools = [multiply, divide]
-
-agent = create_agent(model=model, tools=tools)
-
-print("-" * 60)
+# Bundle tools into a list
+my_tools = [multiply, divide]
 
 
-def extract_text(content) -> str:
-    """Extract clean string text from string or structured content blocks."""
+# ==========================================
+# 3. MODEL & AGENT CREATION
+# ==========================================
+
+# Connect to Google Gemini using LangChain's factory function
+model = init_chat_model(GEMINI_MODEL)
+
+# Bind the model and tools together into an Agent
+agent = create_agent(model=model, tools=my_tools)
+
+
+# ==========================================
+# 4. RUNNER LOGIC
+# ==========================================
+
+def get_text(content: Any) -> str:
+    """Extracts plain text from the AI's complex message responses."""
     if isinstance(content, str):
         return content
-    elif isinstance(content, list):
-        text_parts = []
-        for item in content:
-            if isinstance(item, str):
-                text_parts.append(item)
-            elif isinstance(item, dict) and "text" in item:
-                text_parts.append(item["text"])
-            elif hasattr(item, "text"):
-                text_parts.append(getattr(item, "text"))
-        return "".join(text_parts)
+    if isinstance(content, list):
+        # Join pieces of text if the response is a complex list of blocks
+        return "".join(
+            str(item["text"]) if isinstance(item, dict) and "text" in item else
+            str(item) if isinstance(item, str) else ""
+            for item in content
+        )
     return str(content) if content is not None else ""
 
 
-def run_agent(agent, messages):
-    logging.info(f"--- Starting Agent Execution with input: {messages} ---")
-    result = agent.invoke({"messages": messages})
+def run_agent(agent_obj: Any, question: str) -> None:
+    """Sends the question to the AI and prints the conversation steps."""
+    messages = [(ROLE_USER, question)]
+    print(DIVIDER)
+    
+    # Run the AI!
+    result = agent_obj.invoke({"messages": messages})
 
-    for message in result["messages"]:
-        # Log complete message details to log file
-        raw_info = {
-            "type": message.type,
-            "content": message.content,
-            "additional_kwargs": getattr(message, "additional_kwargs", {}),
-            "response_metadata": getattr(message, "response_metadata", {}),
-            "tool_calls": getattr(message, "tool_calls", None),
-        }
-        logging.info(f"Raw message: {raw_info}")
+    # Loop through the history and print what happened
+    for msg in result["messages"]:
+        logging.info(f"Step: {msg.type} - {msg.content}")
 
-        # Human/User messages
-        if message.type == "human":
-            user_text = extract_text(message.content)
-            print(f"User: {user_text}")
+        if msg.type == "human":
+            print(f"User: {get_text(msg.content)}")
 
-        # AI messages contain standard text AND/OR the requested tool inputs
-        elif message.type == "ai":
-            clean_text = extract_text(message.content).strip()
-            if clean_text:
-                print(f"AI: {clean_text}")
-
-            if getattr(message, "tool_calls", None):
-                for call in message.tool_calls:
+        elif msg.type == "ai":
+            text = get_text(msg.content).strip()
+            if text:
+                print(f"AI: {text}")
+            
+            # Print tools the AI decided to use
+            tool_calls = getattr(msg, "tool_calls", None)
+            if tool_calls:
+                for call in tool_calls:
                     print(f"Tool Call: {call['name']} | Input: {call['args']}")
 
-        # Tool messages contain ONLY the output/result of the tool
-        elif message.type == "tool":
-            tool_output = extract_text(message.content)
-            print(f"Tool Result: {message.name} | Output: {tool_output}")
+        elif msg.type == "tool":
+            print(f"Tool Result: {msg.name} | Output: {get_text(msg.content)}")
 
-        elif message.type == "error":
-            print(f"Error: {message.content}")
+        elif msg.type == "error":
+            print(f"Error: {msg.content}")
 
-    print("-" * 60)
-    logging.info("--- Agent Execution Completed ---")
-    return result
+    print(DIVIDER)
 
 
-run_agent(agent, [("user", "What is 145 multiplied by 8, then divided by 3?")])
+# ==========================================
+# 5. EXECUTION
+# ==========================================
+if __name__ == "__main__":
+    print("\nStarting Google Gemini Agent...")
+    run_agent(agent, EXAMPLE_QUESTION)

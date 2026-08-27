@@ -1,15 +1,15 @@
 """Groq Agent Package."""
-from .config import setup_environment, get_logger
-from .models import get_groq_model
+from .config import prepare_environment, get_agent_logger
+from .models import create_ai_model
 from .tools import MATH_TOOLS, multiply, divide
-from .runner import GroqAgentRunner
+from .runner import AgentRunner
 
 __all__ = [
-    "setup_environment",
-    "get_logger",
-    "get_groq_model",
+    "prepare_environment",
+    "get_agent_logger",
+    "create_ai_model",
     "MATH_TOOLS",
     "multiply",
     "divide",
-    "GroqAgentRunner",
+    "AgentRunner",
 ]
