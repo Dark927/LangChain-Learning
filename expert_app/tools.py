@@ -13,13 +13,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <title>{title}</title>
     <link rel="stylesheet" href="/static/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
     <script>
         // Inherit theme from main app
         if (localStorage.getItem('app-theme') === 'light') {{
             document.documentElement.setAttribute('data-theme', 'light');
         }}
-        mermaid.initialize({{startOnLoad:true, theme: localStorage.getItem('app-theme') === 'light' ? 'default' : 'dark'}});
     </script>
 </head>
 <body class="report-body">
@@ -42,23 +40,20 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 VISUALS_TEMPLATE = """
         <section class="visuals-section" style="margin-top: 3rem; background: var(--glass-bg); padding: 2rem; border-radius: var(--border-radius-lg); border: 1px solid var(--glass-border);">
             <h2 style="color: var(--text-main); font-family: var(--font-sans);">Architecture Visualization</h2>
-            <div class="mermaid" style="background: rgba(0,0,0,0.4); padding: 2rem; border-radius: var(--border-radius-sm); display: flex; justify-content: center; margin-top: 1.5rem;">
-{mermaid_code}
+            <div style="background: rgba(0,0,0,0.4); padding: 2rem; border-radius: var(--border-radius-sm); display: flex; justify-content: center; margin-top: 1.5rem;">
+                <img src="{plot_image_path}" alt="Generated Visualization" style="max-width: 100%; border-radius: 4px;">
             </div>
         </section>
 """
 
-def create_report_files(title: str, content_html: str, mermaid_code: str, raw_markdown: str) -> tuple[str, str]:
+def create_report_files(title: str, content_html: str, plot_image_path: str, raw_markdown: str) -> tuple[str, str]:
     """Generates styled HTML and MD report files.
     Returns (html_url, md_url).
     """
     visuals = ""
-    # Strip ALL backticks aggressively to fix Mermaid 11.17.2 errors
-    import re
-    if mermaid_code:
-        clean_mermaid = re.sub(r'```(?:mermaid)?', '', mermaid_code)
-        clean_mermaid = clean_mermaid.strip()
-        visuals = VISUALS_TEMPLATE.format(mermaid_code=clean_mermaid)
+    if plot_image_path:
+        visuals = VISUALS_TEMPLATE.format(plot_image_path=plot_image_path)
+
         
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     full_html = HTML_TEMPLATE.format(
@@ -76,17 +71,16 @@ def create_report_files(title: str, content_html: str, mermaid_code: str, raw_ma
     html_filepath = REPORTS_DIR / html_filename
     md_filepath = REPORTS_DIR / md_filename
     
-    # Write HTML
-    with open(html_filepath, "w", encoding=UTF8) as f:
-        f.write(full_html)
+    # Write HTML - safely strip carriage returns to avoid \r\r\n corruption on Windows
+    with open(html_filepath, "wb") as f:
+        f.write(full_html.replace('\r', '').encode(UTF8))
         
     # Write MD
     md_content = f"# {title}\n*Generated on {now}*\n\n{raw_markdown}\n\n"
-    if mermaid_code:
-        clean_mermaid = re.sub(r'```(?:mermaid)?', '', mermaid_code).strip()
-        md_content += f"## Architecture Visualization\n\n```mermaid\n{clean_mermaid}\n```\n"
+    if plot_image_path:
+        md_content += f"## Architecture Visualization\n\n![Generated Visualization]({plot_image_path})\n"
         
-    with open(md_filepath, "w", encoding=UTF8) as f:
-        f.write(md_content)
+    with open(md_filepath, "wb") as f:
+        f.write(md_content.replace('\r', '').encode(UTF8))
         
     return f"/reports/{html_filename}", f"/reports/{md_filename}"
