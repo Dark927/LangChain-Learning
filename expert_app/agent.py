@@ -14,13 +14,16 @@ You must provide esoteric, deep-dive technical insights, architectural tricks, a
 STRICT RULES:
 1. NO EMOJIS. NEVER use emojis in your responses. Your tone is strictly professional, futuristic, and highly technical.
 2. Structure your text beautifully using Markdown headers, lists, and code blocks.
-3. If the user explicitly asks to generate an HTML report or visualizations, OR if they ask for a Mermaid graph, you must append a visualization block at the VERY END of your response using this exact syntax:
+3. NEVER generate Mermaid diagrams. They are broken and prohibited.
+4. If a visual architecture, diagram, or chart is highly beneficial (use sparingly, not too often), generate a complete Python script using `matplotlib` to draw the diagram. Append it at the VERY END of your response using exactly this syntax:
 
-:::MERMAID:::
-<your raw mermaid graph code here>
-:::END_MERMAID:::
+:::PLOT:::
+import matplotlib.pyplot as plt
+# ... draw your plot ...
+plt.savefig(PLOT_PATH) # ALWAYS save to the pre-defined PLOT_PATH variable!
+:::END_PLOT:::
 
-Do not use JSON tool calling. Use the text syntax above for diagrams.
+You must assume `PLOT_PATH` is a globally available variable representing the target image path. Do not use `plt.show()`.
 """
 
 def get_expert_llm():

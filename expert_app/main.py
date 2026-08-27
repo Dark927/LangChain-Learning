@@ -30,17 +30,53 @@ app.mount("/reports", StaticFiles(directory=str(REPORTS_DIR)), name="reports")
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
-def extract_mermaid(text: str) -> tuple[str, str]:
-    """Extracts the mermaid block from the AI's response if it exists."""
-    mermaid_code = ""
+import subprocess
+import uuid
+
+def extract_plot_code(text: str) -> tuple[str, str]:
+    """Extracts the python plot code block if it exists."""
+    plot_code = ""
     cleaned_text = text
     
-    match = re.search(r':::MERMAID:::\s*(.*?)\s*:::END_MERMAID:::', text, re.DOTALL)
+    match = re.search(r':::PLOT:::\s*(.*?)\s*:::END_PLOT:::', text, re.DOTALL)
     if match:
-        mermaid_code = match.group(1).strip()
+        plot_code = match.group(1).strip()
         cleaned_text = text[:match.start()] + text[match.end():]
+        # Clean any backticks
+        plot_code = re.sub(r'^```python\s*', '', plot_code, flags=re.MULTILINE)
+        plot_code = re.sub(r'^```\s*', '', plot_code, flags=re.MULTILINE)
         
-    return cleaned_text.strip(), mermaid_code
+    return cleaned_text.strip(), plot_code
+
+def execute_plot_script(plot_code: str) -> str:
+    """Executes the plot script and returns the relative image path."""
+    if not plot_code:
+        return ""
+    
+    plot_id = str(uuid.uuid4())[:8]
+    img_filename = f"plot_{plot_id}.png"
+    img_filepath = REPORTS_DIR / img_filename
+    script_filepath = REPORTS_DIR / f"temp_{plot_id}.py"
+    
+    # Inject the PLOT_PATH variable
+    injected_code = f'PLOT_PATH = r"{str(img_filepath.absolute())}"\n' + plot_code
+    
+    with open(script_filepath, "w", encoding=UTF8) as f:
+        f.write(injected_code)
+        
+    try:
+        # Run the script with the current python executable
+        subprocess.run([sys.executable, str(script_filepath)], check=True, capture_output=True)
+        return f"/reports/{img_filename}"
+    except subprocess.CalledProcessError as e:
+        print(f"Plot execution failed: {e.stderr.decode()}")
+        return ""
+    finally:
+        # Cleanup script
+        try:
+            script_filepath.unlink()
+        except:
+            pass
 
 def format_markdown(text: str) -> str:
     """Converts markdown text to HTML securely with syntax highlighting."""
@@ -90,7 +126,7 @@ async def chat_endpoint(
     
     enhanced_prompt = user_input
     if generate_html:
-        enhanced_prompt += "\n\n[USER INSTRUCTION: I have explicitly checked the 'Generate HTML Report with Visualizations' box. YOU MUST append a :::MERMAID::: block at the end of your response for the visualization.]"
+        enhanced_prompt += "\n\n[USER INSTRUCTION: I have explicitly checked the 'Generate HTML Report with Visualizations' box. YOU MUST append a :::PLOT::: block containing a matplotlib script at the end of your response for the visualization.]"
         
     messages = [
         SystemMessage(content=SYSTEM_PROMPT),
@@ -111,16 +147,18 @@ async def chat_endpoint(
                     "total": token_usage.get("total_tokens", 0)
                 }
 
-        text_content, mermaid_code = extract_mermaid(ai_text)
+        text_content, plot_code = extract_plot_code(ai_text)
+        plot_image_path = execute_plot_script(plot_code)
+        
         formatted_html = format_markdown(text_content)
         
-        if generate_html or mermaid_code:
+        if generate_html or plot_code:
             # Generate Title strictly from user question (truncate if too long)
             title = user_input.strip()
             if len(title) > 60:
                 title = title[:57] + "..."
                 
-            html_url, md_url = create_report_files(title, formatted_html, mermaid_code, text_content)
+            html_url, md_url = create_report_files(title, formatted_html, plot_image_path, text_content)
             
             formatted_html += f"""
             <div class='tool-output' style='display:flex; gap: 15px; align-items:center;'>
@@ -150,11 +188,12 @@ async def chat_endpoint(
 async def retro_report(original_prompt: str = Form(...), response_text: str = Form(...)):
     """Background endpoint to generate a report from existing text without page reload."""
     try:
-        prompt = f"Given this architectural text:\n\n{response_text[:2000]}\n\nGenerate ONLY a :::MERMAID::: block representing this architecture. Do not output anything else."
+        prompt = f"Given this architectural text:\n\n{response_text[:2000]}\n\nGenerate ONLY a :::PLOT::: block containing a matplotlib script representing this architecture. Do not output anything else."
         messages = [SystemMessage(content=SYSTEM_PROMPT), HumanMessage(content=prompt)]
         llm_resp = expert_llm.invoke(messages)
         
-        _, mermaid_code = extract_mermaid(str(llm_resp.content))
+        _, plot_code = extract_plot_code(str(llm_resp.content))
+        plot_image_path = execute_plot_script(plot_code)
         
         formatted_html = format_markdown(response_text)
         
@@ -163,7 +202,7 @@ async def retro_report(original_prompt: str = Form(...), response_text: str = Fo
         if len(title) > 60:
             title = title[:57] + "..."
             
-        html_url, md_url = create_report_files(title, formatted_html, mermaid_code, response_text)
+        html_url, md_url = create_report_files(title, formatted_html, plot_image_path, response_text)
         
         msg = f"""Reports generated: 
         <a href='{html_url}' target='_blank' style='color:#fff; text-decoration:underline;'>View HTML</a> | 
