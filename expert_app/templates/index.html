@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elite AI Architecture Core</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+</head>
+<body class="neon-body">
+    <!-- Theme Toggle Button -->
+    <button class="theme-toggle" onclick="toggleTheme()" id="theme-btn">☀️ LIGHT MODE</button>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay">
+        <div class="spinner"></div>
+        <div id="loading-text" class="loading-text">EXPERT AGENT THINKING...</div>
+    </div>
+
+    <div class="container">
+        <header class="main-header">
+            <h1 class="neon-text title-glow">ELITE ARCHITECTURE CORE</h1>
+            <p class="subtitle">LangChain • Groq • Antigravity</p>
+        </header>
+
+        <section class="chat-interface glass-panel">
+            <form action="/chat" method="post" class="neon-form" onsubmit="showLoader()">
+                <div class="input-group">
+                    <label for="user_input" class="neon-label">QUERY EXPERT SYSTEM</label>
+                    <textarea 
+                        name="user_input" 
+                        id="user_input" 
+                        rows="3" 
+                        placeholder="Request esoteric optimizations or deep architectural insights..." 
+                        required
+                    >{{ user_input if user_input else '' }}</textarea>
+                </div>
+                
+                <div class="checkbox-group">
+                    <input type="checkbox" id="generate_html" name="generate_html" value="true">
+                    <label for="generate_html" class="checkbox-label">
+                        <span class="custom-checkbox"></span>
+                        GENERATE DEEP-DIVE HTML REPORT & VISUALIZATIONS
+                    </label>
+                </div>
+
+                <button type="submit" class="neon-button">INITIALIZE QUERY</button>
+            </form>
+        </section>
+
+        {% if response %}
+        <section class="response-section glass-panel">
+            <h2 class="neon-label">SYSTEM RESPONSE</h2>
+            
+            <div class="response-box formatted-markdown">
+                {{ response | safe }}
+            </div>
+            
+            {% if token_data %}
+            <div class="token-stats">
+                <div class="token-stat-item">Prompt Tokens: <span>{{ token_data.prompt }}</span></div>
+                <div class="token-stat-item">Completion Tokens: <span>{{ token_data.completion }}</span></div>
+                <div class="token-stat-item total">Total Usage: <span>{{ token_data.total }}</span></div>
+            </div>
+            {% endif %}
+
+            <!-- Retroactive HTML Report Generator (AJAX Background) -->
+            <div id="retro-container" style="margin-top: 1.5rem;">
+                <button type="button" class="neon-button secondary-btn" id="retro-btn" onclick="generateRetroReport()">GENERATE HTML REPORT FROM THIS</button>
+                <div id="retro-notification" class="tool-output" style="display:none; margin-top: 10px;"></div>
+            </div>
+            
+            <!-- Hidden payload to pass back to the server for background report -->
+            <div id="raw-text-payload" style="display: none;">{{ raw_text }}</div>
+        </section>
+        {% endif %}
+    </div>
+
+    <script>
+        // Loader logic
+        function showLoader(text = 'EXPERT AGENT THINKING...') {
+            document.getElementById('loading-text').innerText = text;
+            document.getElementById('loading-overlay').style.display = 'flex';
+        }
+        function hideLoader() {
+            document.getElementById('loading-overlay').style.display = 'none';
+        }
+
+        // Theme Toggle Logic
+        const body = document.documentElement;
+        const themeBtn = document.getElementById('theme-btn');
+        
+        const savedTheme = localStorage.getItem('app-theme') || 'dark';
+        if (savedTheme === 'light') {
+            body.setAttribute('data-theme', 'light');
+            themeBtn.innerText = '🌙 DARK MODE';
+        }
+
+        function toggleTheme() {
+            const currentTheme = body.getAttribute('data-theme');
+            if (currentTheme === 'light') {
+                body.removeAttribute('data-theme');
+                localStorage.setItem('app-theme', 'dark');
+                themeBtn.innerText = '☀️ LIGHT MODE';
+            } else {
+                body.setAttribute('data-theme', 'light');
+                localStorage.setItem('app-theme', 'light');
+                themeBtn.innerText = '🌙 DARK MODE';
+            }
+        }
+        
+        // Background Retroactive Report Generation
+        async function generateRetroReport() {
+            const btn = document.getElementById('retro-btn');
+            const notif = document.getElementById('retro-notification');
+            const rawText = document.getElementById('raw-text-payload').innerText;
+            const originalPrompt = document.getElementById('user_input').value;
+            
+            if (!rawText) return;
+            
+            btn.style.display = 'none';
+            notif.style.display = 'block';
+            notif.innerText = '[SYSTEM EVENT]: Engaging AI to craft architecture visualization...';
+            
+            const formData = new FormData();
+            formData.append('original_prompt', originalPrompt);
+            formData.append('response_text', rawText);
+            
+            try {
+                const res = await fetch('/retro_report', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await res.json();
+                if (data.status === 'success') {
+                    notif.innerHTML = '<strong>[SYSTEM EVENT]:</strong> ' + data.message;
+                } else {
+                    notif.innerHTML = '<strong style="color:red">[SYSTEM EVENT]:</strong> ' + data.message;
+                    btn.style.display = 'inline-block';
+                }
+            } catch (err) {
+                notif.innerHTML = '<strong style="color:red">[SYSTEM EVENT]:</strong> Network error occurred.';
+                btn.style.display = 'inline-block';
+            }
+        }
+    </script>
+</body>
+</html>
