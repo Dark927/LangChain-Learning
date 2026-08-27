@@ -1,35 +1,66 @@
-# Project Rules for Agentic AI Workspace
+# Project Rules & Agent Execution Bridge
 
-These rules govern the development, coding standards, and agent behavior within this workspace.
-
----
-
-## 1. Architecture & SOLID Design Principles
-- **Single Responsibility Principle (SRP)**: Keep components focused on one responsibility.
-  - Configuration & Environment: in `config.py`
-  - Tool definitions & registries: in `tools.py`
-  - Model providers & factories: in `models.py`
-  - Execution, logging, & output formatting: in `runner.py`
-- **Open/Closed Principle (OCP)**: Design toolsets and models to be easily extensible without modifying existing runner logic.
-- **Dependency Inversion Principle (DIP)**: High-level orchestrators must depend on abstractions (`BaseChatModel`, `BaseTool`), with concrete dependencies injected at the composition root.
-- **Modular Packaging**: When adding support for new model providers or experiments, organize them in dedicated subpackages (e.g., `groq_agent/`) rather than creating monolithic single-file scripts.
+These rules govern all agent behaviors, coding standards, architectural decisions, and skill activations across this workspace.
 
 ---
 
-## 2. Safety & Code Preservation
-- **Preserve Existing Code**: Do not modify or overwrite existing working scripts (such as `main.py`) unless explicitly instructed by the user.
-- **Incremental Additions**: For new features, providers, or alternative approaches, create new modules or subdirectories.
+## 1. Core Principles
+- **No Unsolicited Visualizers**: Do not create visualizers or debugging visual tools unless explicitly asked.
+- **Clean Production Comments**: Do not write comments explaining your actions or reasoning in the code. Production code must use clear English comments explaining logic and purpose only.
+- **Preserve Existing Code**: Do not modify or overwrite existing working scripts unless explicitly instructed by the user.
 
 ---
 
-## 3. Environment & Security
-- **Strict Secrets Protection**: Never hardcode API keys or credentials in source files. Always load from `.env` via `python-dotenv`.
-- **Git Hygiene**: Keep `.env` and `logs/` ignored in `.gitignore`. Provide clean examples in `.env.example`.
+## 2. Hardcoding Rules
+- **No Magic Numbers or Raw Strings**: Do not use magic numbers or raw strings directly in logic blocks.
+- **Constants & Fields**: Create fields/constants for numbers and strings used within the class or module.
 
 ---
 
-## 4. Platform Compatibility (Windows UTF-8)
-- **Windows Terminal Output**: Always configure standard output / error streams for UTF-8 at script start to prevent `UnicodeEncodeError` (e.g., math symbols, emoji, fractions):
+## 3. Unity C# Conventions
+
+### Naming Conventions
+- **Private fields**: Use the `m_` prefix followed by PascalCase (e.g., `m_TargetSpeed`).
+- **Public fields, properties, and events**: Use PascalCase (e.g., `TargetHealth`).
+- **Events**: Prefix with `On` (e.g., `OnHealthChanged`).
+- **Parameters and local variables**: Use camelCase (e.g., `currentDamage`).
+
+### Documentation Rules (XML Comments)
+Provide clear, functional English XML comments on:
+- Classes and Interfaces
+- Public Fields and Properties
+- Events
+- Public Methods and Interface Implementations (include `<param>` and `<returns>` tags whenever applicable)
+
+### Code Organization (`#region` Blocks)
+Group class members strictly using `#region` blocks in this exact order:
+1. `Serialized Fields`
+2. `Public Fields`
+3. `Public Properties`
+4. `Events`
+5. `Private Fields`
+6. `Unity Lifecycle Methods`
+7. `[InterfaceName] Implementation` (Replace with actual interface name if applicable)
+8. `Public API Methods`
+9. `Private Helper Methods`
+10. `Debug Visualization` (Wrapped in `#if UNITY_EDITOR` / `#endif`)
+
+---
+
+## 4. Python & Agentic AI Guidelines
+
+### Architecture & SOLID Principles
+- **Single Responsibility Principle (SRP)**: Keep components focused on one responsibility (`config.py`, `tools.py`, `models.py`, `runner.py`).
+- **Open/Closed Principle (OCP)**: Design toolsets and models to be easily extensible without modifying runner logic.
+- **Dependency Inversion Principle (DIP)**: Depend on abstractions (`BaseChatModel`, `BaseTool`), injecting concrete dependencies at the composition root.
+- **Modular Packaging**: Organize new model providers or experiments into dedicated subpackages (e.g., `groq_agent/`).
+
+### Environment & Security
+- **Strict Secrets Protection**: Never hardcode API keys or credentials. Always load from `.env` via `python-dotenv`.
+- **Git Hygiene**: Keep `.env` and `logs/` ignored in `.gitignore`.
+
+### Platform Compatibility (Windows UTF-8)
+- Always configure standard streams for UTF-8 at script startup:
   ```python
   if sys.platform == "win32":
       try:
@@ -39,15 +70,34 @@ These rules govern the development, coding standards, and agent behavior within 
           pass
   ```
 
----
-
-## 5. Agent Tools & Type Hinting
-- **Type Annotations**: Provide explicit type hints for all tool functions, arguments, and return types.
-- **Tool Docstrings**: Every tool function decorated with `@tool` must have a clear, concise docstring explaining what it does, its arguments, and its expected outputs (this is essential for LLM tool calling accuracy).
-- **Error Handling**: Tools must handle edge cases gracefully (e.g., division by zero) and return informative error messages rather than raising unhandled exceptions.
+### Tool Definitions & Verification
+- **Type Annotations & Docstrings**: Explicit type hints and clear docstrings on all tool functions.
+- **Error Handling**: Graceful error handling in tools (e.g., division by zero).
+- **Verification**: Test and verify execution in the terminal before reporting results.
 
 ---
 
-## 6. Execution & Verification
-- **Test Before Reporting**: Whenever scripts or agents are modified or created, verify execution in the terminal to ensure tool calling, parsing, and outputs function end-to-end.
-- **Structured Logging**: Log all raw model responses, tool calls, and execution steps to the `logs/` directory for debugging and learning inspection.
+## 5. Skill Orchestration Bridge & Decision Matrix
+
+This bridge defines when and how the agent must activate specialized skills and orchestrate their combinations.
+
+### Available Workspace Skills:
+1. **[`senior-python-dev`](.agents/skills/senior-python-dev/SKILL.md)**: Modern Python 3.10+, protocols, async concurrency, strict typing, domain exceptions.
+2. **[`senior-langchain-llm`](.agents/skills/senior-langchain-llm/SKILL.md)**: LangChain v0.3+, LangGraph, tool schema engineering, multi-provider resilience, fallbacks.
+3. **[`architecture-design-patterns`](.agents/skills/architecture-design-patterns/SKILL.md)**: SOLID architecture, Hexagonal/Clean architecture, design patterns, and agentic workflows.
+4. **[`git-conventions`](.agents/skills/git-conventions/SKILL.md)**: Modern production-ready Git branch naming and conventional commits.
+
+### Skill Activation & Combination Matrix:
+
+| Task Type | Primary Skill | Supporting Skill(s) | Required Output Standard |
+| :--- | :--- | :--- | :--- |
+| **Python Code Writing & Refactoring** | `senior-python-dev` | `architecture-design-patterns` | Strict typing (Protocols/Union syntax), custom exceptions, clean imports, zero magic values. |
+| **LLM / Tool / Agent Development** | `senior-langchain-llm` | `senior-python-dev` | Bulletproof `@tool` docstrings, return string error handling, `init_chat_model` provider decoupling. |
+| **New Project / Subsystem Design** | `architecture-design-patterns` | `senior-python-dev`, `senior-langchain-llm` | SOLID adherence, separated `config`/`tools`/`models`/`runner`/`main`, composition root. |
+| **Full Agentic Pipeline (End-to-End)** | **All 3 Skills Combined** | — | Clean Architecture layers, resilient fallback LLMs, structured error trapping, Windows UTF-8 safety. |
+| **Version Control & Commits** | `git-conventions` | — | Conventional commits (`feat`, `fix`, `chore`), detailed atomic bodies, and strict branch naming. |
+
+### Execution Workflow:
+1. **Analyze Requirements**: Determine which skill domain(s) apply to the user's prompt using the matrix above.
+2. **Consult Skill Guidelines**: Apply the specific standards (e.g., design patterns from `architecture-design-patterns` + tool error handling from `senior-langchain-llm` + typing from `senior-python-dev`).
+3. **Verify Execution**: Always execute scripts in the terminal to verify runtime behavior before presenting the solution to the user.
