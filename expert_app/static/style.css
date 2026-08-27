@@ -566,3 +566,14 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 .codehilite .vi { color: #F8F8F2 } /* Name.Variable.Instance */
 .codehilite .vm { color: #F8F8F2 } /* Name.Variable.Magic */
 .codehilite .il { color: #AE81FF } /* Literal.Number.Integer.Long */
+
+/* Table Styles Restored */
+.formatted-markdown table { width: 100%; border-collapse: collapse; }
+.formatted-markdown th, .formatted-markdown td { border: 1px solid var(--glass-border); padding: 0.75rem 1rem; text-align: left; }
+.formatted-markdown th { background: rgba(255, 107, 0, 0.1); color: var(--neon-orange); font-family: var(--font-mono); }
+.formatted-markdown tr:nth-child(even) { background: rgba(255, 255, 255, 0.02); }
+
+/* Code Snippet Wrapper Styles Restored */
+.codehilite { position: relative; margin-top: 1.5rem; margin-bottom: 1.5rem; border-radius: var(--border-radius-sm); overflow: hidden; border: 1px solid var(--glass-border); }
+.codehilite:before { content: attr(data-language); display: block; background: var(--input-bg); color: var(--neon-orange); padding: 0.2rem 1rem; font-family: var(--font-mono); font-size: 0.8rem; text-transform: uppercase; font-weight: bold; border-bottom: 1px solid var(--glass-border); }
+.codehilite pre { margin: 0 !important; padding: 1rem; overflow-x: auto; background: #272822 !important; border: none !important; }
