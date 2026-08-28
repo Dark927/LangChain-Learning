@@ -8,6 +8,7 @@ These rules govern all agent behaviors, coding standards, architectural decision
 - **No Unsolicited Visualizers**: Do not create visualizers or debugging visual tools unless explicitly asked.
 - **Clean Production Comments**: Do not write comments explaining your actions or reasoning in the code. Production code must use clear English comments explaining logic and purpose only.
 - **Preserve Existing Code**: Do not modify or overwrite existing working scripts unless explicitly instructed by the user.
+- **YOLO Git Execution**: Whenever requested to perform Git operations (commits, branching, pushes, merges), execute the terminal commands immediately and autonomously without asking for permission first.
 
 ---
 
