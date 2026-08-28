@@ -87,8 +87,10 @@ async def chat_endpoint(
                         "completion": token_usage.get("completion_tokens", 0),
                         "total": token_usage.get("total_tokens", 0)
                     }
-
+        print("[DEBUG] Exited the exit_stack successfully!")
+        print("[DEBUG] Formatting markdown...")
         formatted_html = format_markdown(ai_text)
+        print("[DEBUG] Done formatting markdown.")
         
         if generate_html:
             # Generate Title strictly from user question (truncate if too long)
@@ -122,6 +124,20 @@ async def chat_endpoint(
             "token_data": token_data
         }
     )
+
+@app.get("/test_llm")
+async def test_llm():
+    print("[DEBUG] /test_llm called")
+    try:
+        from .agent import get_expert_llm
+        llm = get_expert_llm()
+        print("[DEBUG] /test_llm invoking...")
+        result = await llm.ainvoke("Say hello!")
+        print(f"[DEBUG] /test_llm success: {result.content}")
+        return {"response": result.content}
+    except Exception as e:
+        print(f"[DEBUG] /test_llm error: {e}")
+        return {"error": str(e)}
 
 @app.post("/retro_report")
 async def retro_report(original_prompt: str = Form(...), response_text: str = Form(...)):
