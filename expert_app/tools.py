@@ -1,6 +1,8 @@
 """Tools and File Generators for the Expert AI App."""
 
 import uuid
+import markdown
+import re
 from datetime import datetime
 from .config import REPORTS_DIR, UTF8
 
@@ -84,3 +86,32 @@ def create_report_files(title: str, content_html: str, plot_image_path: str, raw
         f.write(md_content.replace('\r', '').encode(UTF8))
         
     return f"/reports/{html_filename}", f"/reports/{md_filename}"
+
+def format_markdown(text: str) -> str:
+    """Converts markdown text to HTML securely with syntax highlighting."""
+    html = markdown.markdown(text, extensions=[
+        'pymdownx.superfences',
+        'pymdownx.highlight',
+        'tables'
+    ])
+    
+    # pymdownx generates: <div class="highlight"><pre><span>...
+    # It also attaches the language class if specified, e.g. <div class="highlight language-python">
+    # Let's map it to our CSS class and extract the language for the badge
+    html = html.replace('class="highlight', 'class="codehilite')
+    
+    # Inject data-language attribute based on the language-XYZ class
+    def inject_lang(match):
+        lang = match.group(1).replace('language-', '')
+        return f'<div class="codehilite {match.group(1)}" data-language="{lang}">'
+    
+    html = re.sub(r'<div class="codehilite ([^"]+)">', inject_lang, html)
+    
+    # Fallback for code blocks without a specified language
+    html = html.replace('<div class="codehilite">', '<div class="codehilite" data-language="code">')
+    
+    # Wrap tables in a responsive scrolling container
+    html = html.replace('<table>', '<div style="overflow-x: auto; width: 100%; margin: 1.5rem 0; border-radius: var(--border-radius-sm); border: 1px solid var(--glass-border);"><table style="margin: 0; border: none;">')
+    html = html.replace('</table>', '</table></div>')
+    
+    return html

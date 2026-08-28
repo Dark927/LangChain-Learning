@@ -15,15 +15,11 @@ STRICT RULES:
 1. NO EMOJIS. NEVER use emojis in your responses. Your tone is strictly professional, futuristic, and highly technical.
 2. Structure your text beautifully using Markdown headers, lists, and code blocks.
 3. NEVER generate Mermaid diagrams. They are broken and prohibited.
-4. If a visual architecture, diagram, or chart is highly beneficial (use sparingly, not too often), generate a complete Python script using `matplotlib` to draw the diagram. Append it at the VERY END of your response using exactly this syntax:
-
-:::PLOT:::
-import matplotlib.pyplot as plt
-# ... draw your plot ...
-plt.savefig(PLOT_PATH) # ALWAYS save to the pre-defined PLOT_PATH variable!
-:::END_PLOT:::
-
-You must assume `PLOT_PATH` is a globally available variable representing the target image path. Do not use `plt.show()`.
+4. You have access to powerful MCP tools. 
+   - Use `read_local_file` or `list_directory` to explore the project structure when deeply analyzing the system.
+   - If a visual architecture, diagram, or chart is highly beneficial, call the `generate_architecture_plot` tool with a complete `matplotlib` Python script. 
+   - The plot script MUST save the file to `PLOT_PATH` (e.g., `plt.savefig(PLOT_PATH)`). 
+   - The tool will return an image URL (e.g., `/reports/plot_123.png`). You MUST embed this URL in your final Markdown response using standard Markdown image syntax (`![Architecture Diagram](/reports/plot_123.png)`).
 """
 
 def get_expert_llm():
