@@ -10,8 +10,10 @@ mcp = FastMCP("ExpertPlotterMCP")
 REPORTS_DIR = Path(__file__).parent.parent.parent / "reports"
 REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
+import asyncio
+
 @mcp.tool()
-def generate_architecture_plot(plot_code: str) -> str:
+async def generate_architecture_plot(plot_code: str) -> str:
     """
     Executes matplotlib Python code to generate an architecture visualization.
     Returns the web-accessible path to the generated PNG image.
@@ -33,10 +35,20 @@ def generate_architecture_plot(plot_code: str) -> str:
         f.write(injected_code)
         
     try:
-        subprocess.run([sys.executable, str(script_filepath)], check=True, capture_output=True)
+        process = await asyncio.create_subprocess_exec(
+            sys.executable, str(script_filepath),
+            stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL
+        )
+        await process.wait()
+        
+        if process.returncode != 0:
+            return f"Plot execution failed (return code {process.returncode})."
+            
         return f"/reports/{img_filename}"
-    except subprocess.CalledProcessError as e:
-        return f"Plot execution failed: {e.stderr.decode('utf-8')}"
+    except Exception as e:
+        return f"Plot execution failed with exception: {str(e)}"
     finally:
         try:
             script_filepath.unlink(missing_ok=True)
