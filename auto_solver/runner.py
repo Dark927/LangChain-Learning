@@ -1,9 +1,22 @@
 import time
 import pyautogui
 from pynput import keyboard
+import threading
+from typing import Tuple
 from config import config
 from vision import VisionHandler
 from agy_client import ask_agent
+import logging
+import os
+
+# Set up Q&A trace logger
+log_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "qa_trace.log")
+qa_logger = logging.getLogger("QATrace")
+qa_logger.setLevel(logging.INFO)
+if not qa_logger.handlers:
+    fh = logging.FileHandler(log_file, encoding='utf-8')
+    fh.setFormatter(logging.Formatter('[%(asctime)s]\n%(message)s\n' + '-'*50))
+    qa_logger.addHandler(fh)
 
 class Runner:
     def __init__(self):
@@ -72,6 +85,8 @@ class Runner:
                     if not self.safe_sleep(1): break
                     continue
                     
+                qa_logger.info(f"QUESTION EXTRACTED:\n{text.strip()}")
+                    
                 # 3. Ask Agent
                 print("Asking Antigravity...")
                 # Pass lambda to allow subprocess kill if stop requested
@@ -86,6 +101,8 @@ class Runner:
                     print("No answer from agent. Retrying...")
                     if not self.safe_sleep(1): break
                     continue
+                    
+                qa_logger.info(f"AGENT ANSWER:\n{answer_text.strip()}")
                     
                 # 4. Find where to click
                 click_point = self.vision.find_click_point(answer_text, word_boxes)
