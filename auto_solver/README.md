@@ -2,6 +2,9 @@
 
 Auto Solver Pro is a desktop automation tool designed to extract multiple-choice questions from a user interface, resolve them using large language models via the Google Antigravity CLI, and autonomously execute interface interactions.
 
+<img width="1366" height="928" alt="image" src="https://github.com/user-attachments/assets/6a428198-2e44-4672-a842-e1679efdf637" />
+
+
 ## Architecture & Design
 
 The application operates as a bridge between computer vision and language models. It leverages a modern CustomTkinter graphical interface for configuration and standard Python modules for background execution.
