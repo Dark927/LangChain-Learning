@@ -160,3 +160,45 @@ def _parse_batch_reply(reply: str) -> list[tuple[str, str]]:
             current_q = None
 
     return pairs
+
+import json
+
+def format_qa_log(qa_log: list[dict], check_abort=None, live_log_callback=None) -> dict:
+    """
+    Sends raw QA logs to the agent to clean up OCR artifacts, format perfectly,
+    and generate a title.
+    Returns a dict: {"title": "Generated Name", "qa_pairs": [{"q": "Question", "a": "Answer"}]}
+    """
+    if not qa_log:
+        return {}
+        
+    raw_text = "\n".join(f"Q: {entry['question']}\nA: {entry['answer']}" for entry in qa_log)
+    
+    prompt = (
+        "You are an expert data cleaner. I have a list of raw questions and answers extracted via OCR.\n"
+        "Clean up any OCR artifacts, typos, or completely unrelated random words that might have been accidentally captured.\n"
+        "Generate a short, descriptive title for this test session based on its topic.\n\n"
+        "You MUST reply with ONLY a valid JSON object matching this exact schema:\n"
+        '{\n'
+        '  "title": "Topic of the Test",\n'
+        '  "qa_pairs": [\n'
+        '    {"q": "Cleaned Question", "a": "Cleaned Answer"}\n'
+        '  ]\n'
+        '}\n\n'
+        f"Raw Data:\n{raw_text}"
+    )
+    
+    reply = _run_agy(prompt, check_abort, live_log_callback)
+    
+    if not reply:
+        return {}
+        
+    # Extract JSON from reply in case the model adds markdown formatting
+    try:
+        json_match = re.search(r'\{.*\}', reply.replace('\n', ' '), re.DOTALL)
+        if json_match:
+            return json.loads(json_match.group(0))
+    except Exception as e:
+        print(f"[Agent] Failed to parse JSON: {e}")
+        
+    return {}

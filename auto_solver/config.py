@@ -38,5 +38,8 @@ class AppConfig:
     
     # Toggle logging of exact time taken per step
     show_step_timings: bool = True
+    
+    # Enable AI formatting and saving of final QA logs
+    save_qa_logs: bool = True
 
 config = AppConfig()

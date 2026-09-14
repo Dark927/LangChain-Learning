@@ -367,5 +367,33 @@ class Runner:
 
         self._set_status("Stopped")
         self._log("Google Forms Automation stopped.")
+        
+        if config.save_qa_logs and self.qa_log:
+            self._set_status("Formatting Final Log")
+            self._log("Sending final QA log to AI for cleanup and title generation...", "blue")
+            try:
+                from agy_client import format_qa_log
+                import history_manager
+                
+                def fmt_log_cb(msg):
+                    self._log(f"  [AI] {msg}", "gray")
+                    
+                formatted_data = format_qa_log(self.qa_log, lambda: self.stop_requested, fmt_log_cb)
+                if formatted_data and "title" in formatted_data and "qa_pairs" in formatted_data:
+                    title = formatted_data["title"]
+                    clean_pairs = formatted_data["qa_pairs"]
+                    self._log(f"AI generated title: '{title}'", "green")
+                    history_manager.add_log(title, clean_pairs)
+                    self._log("Clean QA log saved to history successfully.", "green")
+                    
+                    # Update local qa_log with the cleaned one to show nicely in the dashboard!
+                    self.qa_log = [{"question": p.get("q", ""), "answer": p.get("a", "")} for p in clean_pairs]
+                else:
+                    self._log("AI returned empty or invalid formatting. Falling back to raw log.", "yellow")
+                    history_manager.add_log("Unformatted Session", self.qa_log)
+            except Exception as e:
+                self._log(f"Failed to format/save log: {e}", "red")
+        
+        self._set_status("Idle")
         if self.on_finish_callback:
             self.on_finish_callback()

@@ -99,6 +99,8 @@ class AppUI:
         
         # File Menu
         file_menu = tk.Menu(self.menubar, tearoff=0)
+        file_menu.add_command(label="View Logs History", command=self.open_history_window)
+        file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self.root.quit)
         self.menubar.add_cascade(label="File", menu=file_menu)
         
@@ -338,6 +340,10 @@ class AppUI:
         self.timings_cb = ctk.CTkCheckBox(frame, text="Show Step Timings in Log", variable=self.timings_var, font=PRO_FONT)
         self.timings_cb.pack(fill="x", pady=(10, 5), padx=10)
         
+        self.save_logs_var = ctk.BooleanVar(value=config.save_qa_logs)
+        self.save_logs_cb = ctk.CTkCheckBox(frame, text="Enable AI Cleanup & Save Final QA Logs", variable=self.save_logs_var, font=PRO_FONT)
+        self.save_logs_cb.pack(fill="x", pady=(5, 15), padx=10)
+        
         def save_and_close():
             try:
                 delay_val = float(self.thinking_delay_entry.get().strip())
@@ -359,6 +365,7 @@ class AppUI:
             config.ocr_language = self.ocr_lang_entry.get().strip() or "eng"
             config.model = self.model_combo.get().strip()
             config.show_step_timings = self.timings_var.get()
+            config.save_qa_logs = self.save_logs_var.get()
             
             self.settings_win.destroy()
 
@@ -585,3 +592,126 @@ class AppUI:
                 messagebox.showinfo("Success", f"Report saved successfully to:\n{filepath}")
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to save report:\n{e}")
+
+    def open_history_window(self):
+        if hasattr(self, "history_win") and self.history_win.winfo_exists():
+            self.history_win.focus()
+            return
+            
+        import history_manager
+        
+        self.history_win = ctk.CTkToplevel(self.root)
+        self.history_win.title("Logs History")
+        self.history_win.geometry("700x600")
+        self.history_win.attributes('-topmost', True)
+        
+        header_frame = ctk.CTkFrame(self.history_win, fg_color="transparent")
+        header_frame.pack(fill="x", padx=20, pady=(15, 5))
+        
+        ctk.CTkLabel(header_frame, text="Saved QA Sessions", font=HEADER_FONT).pack(side="left")
+        
+        controls = ctk.CTkFrame(self.history_win, fg_color="transparent")
+        controls.pack(fill="x", padx=20, pady=5)
+        
+        search_var = tk.StringVar()
+        search_entry = ctk.CTkEntry(controls, textvariable=search_var, placeholder_text="Search logs...", width=250, font=PRO_FONT)
+        search_entry.pack(side="left")
+        
+        sort_var = ctk.StringVar(value="Newest First")
+        sort_menu = ctk.CTkOptionMenu(controls, variable=sort_var, values=["Newest First", "Oldest First"], width=120, font=PRO_FONT)
+        sort_menu.pack(side="right")
+        
+        list_frame = ctk.CTkScrollableFrame(self.history_win)
+        list_frame.pack(fill="both", expand=True, padx=20, pady=10)
+        
+        def refresh_list(*args):
+            for widget in list_frame.winfo_children():
+                widget.destroy()
+                
+            logs = history_manager.load_history()
+            query = search_var.get().lower()
+            
+            if query:
+                logs = [lg for lg in logs if query in lg.get("title", "").lower() or 
+                        any(query in pair.get("q", "").lower() or query in pair.get("a", "").lower() for pair in lg.get("qa_pairs", []))]
+                        
+            if sort_var.get() == "Newest First":
+                logs.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+            else:
+                logs.sort(key=lambda x: x.get("timestamp", ""))
+                
+            if not logs:
+                ctk.CTkLabel(list_frame, text="No logs found.", font=PRO_FONT, text_color="gray").pack(pady=20)
+                return
+                
+            for log in logs:
+                row = ctk.CTkFrame(list_frame, corner_radius=6)
+                row.pack(fill="x", pady=5, padx=5)
+                
+                info_frame = ctk.CTkFrame(row, fg_color="transparent")
+                info_frame.pack(side="left", fill="both", expand=True, padx=10, pady=10)
+                
+                title = log.get("title", "Untitled")
+                date_str = log.get("timestamp", "")[:16].replace("T", " ")
+                pairs_count = len(log.get("qa_pairs", []))
+                
+                ctk.CTkLabel(info_frame, text=title, font=SUBHEADER_FONT, anchor="w").pack(fill="x")
+                ctk.CTkLabel(info_frame, text=f"{date_str}  |  {pairs_count} Q&A pairs", font=("Consolas", 11), text_color="gray", anchor="w").pack(fill="x")
+                
+                btn_frame = ctk.CTkFrame(row, fg_color="transparent")
+                btn_frame.pack(side="right", padx=10, pady=10)
+                
+                # We need to capture log_id correctly in lambdas
+                log_id = log["id"]
+                log_title = title
+                log_pairs = log.get("qa_pairs", [])
+                
+                ctk.CTkButton(btn_frame, text="View", width=60, font=PRO_FONT, 
+                              command=lambda t=log_title, p=log_pairs: self._view_historical_log(t, p)).pack(side="left", padx=2)
+                ctk.CTkButton(btn_frame, text="Rename", width=60, font=PRO_FONT, fg_color="#f59e0b", hover_color="#d97706",
+                              command=lambda i=log_id, old=log_title: _rename_log_ui(i, old)).pack(side="left", padx=2)
+                ctk.CTkButton(btn_frame, text="Delete", width=60, font=PRO_FONT, fg_color="#ef4444", hover_color="#b91c1c",
+                              command=lambda i=log_id: _delete_log_ui(i)).pack(side="left", padx=2)
+                              
+        def _delete_log_ui(log_id):
+            if messagebox.askyesno("Confirm Delete", "Are you sure you want to delete this log?", parent=self.history_win):
+                history_manager.delete_log(log_id)
+                refresh_list()
+                
+        def _rename_log_ui(log_id, old_title):
+            import tkinter.simpledialog
+            new_title = tkinter.simpledialog.askstring("Rename Log", "Enter new title:", initialvalue=old_title, parent=self.history_win)
+            if new_title and new_title.strip() != old_title:
+                history_manager.rename_log(log_id, new_title.strip())
+                refresh_list()
+                
+        search_var.trace_add("write", refresh_list)
+        sort_var.trace_add("write", refresh_list)
+        
+        refresh_list()
+        
+    def _view_historical_log(self, title, qa_pairs):
+        dashboard = ctk.CTkToplevel(self.history_win)
+        dashboard.title("Historical QA Session")
+        dashboard.geometry("650x550")
+        dashboard.attributes('-topmost', True)
+        
+        header_frame = ctk.CTkFrame(dashboard, fg_color="transparent")
+        header_frame.pack(fill="x", padx=20, pady=15)
+        
+        ctk.CTkLabel(header_frame, text=title, font=HEADER_FONT).pack(side="left")
+        
+        scroll = ctk.CTkScrollableFrame(dashboard)
+        scroll.pack(padx=20, pady=10, fill="both", expand=True)
+        
+        for idx, entry in enumerate(qa_pairs, start=1):
+            frame = ctk.CTkFrame(scroll, corner_radius=5)
+            frame.pack(fill="x", pady=5, padx=5)
+            
+            q = entry.get('q', entry.get('question', ''))
+            a = entry.get('a', entry.get('answer', ''))
+            
+            ctk.CTkLabel(frame, text=f"Q{idx}: {q}", font=SUBHEADER_FONT, justify="left", wraplength=550).pack(anchor="w", padx=10, pady=(10, 5))
+            ctk.CTkLabel(frame, text=f"A: {a}", font=PRO_FONT, text_color="#10b981", justify="left", wraplength=550).pack(anchor="w", padx=10, pady=(0, 10))
+            
+        ctk.CTkButton(dashboard, text="Close", command=dashboard.destroy, font=PRO_FONT).pack(pady=10)
