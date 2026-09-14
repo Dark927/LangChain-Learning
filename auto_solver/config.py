@@ -35,5 +35,8 @@ class AppConfig:
     # Number of mouse wheel scroll clicks per scroll event in Google Forms mode
     # Each click scrolls ~100-120px; increase for larger screens
     scroll_amount: int = 5
+    
+    # Toggle logging of exact time taken per step
+    show_step_timings: bool = True
 
 config = AppConfig()

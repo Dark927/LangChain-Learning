@@ -9,7 +9,7 @@ _AGENT_TIMEOUT_SEC: int = 45
 _SCREEN_TEXT_MAX_CHARS: int = 3000
 
 
-def _run_agy(prompt: str, check_abort=None) -> str:
+def _run_agy(prompt: str, check_abort=None, live_log_callback=None) -> str:
     """
     Spawns a single agy subprocess, polls until it exits, and returns stdout.
     Kills the process if stop is requested or the call exceeds _AGENT_TIMEOUT_SEC.
@@ -18,29 +18,61 @@ def _run_agy(prompt: str, check_abort=None) -> str:
     proc = subprocess.Popen(
         ["agy", "--print", prompt, "--model", config.model, "--continue"],
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         text=True,
         encoding="utf-8",
+        bufsize=1,
     )
+    
+    import queue
+    import threading
+    q = queue.Queue()
+    
+    def reader(pipe, q):
+        for line in iter(pipe.readline, ''):
+            q.put(line)
+        pipe.close()
+        
+    t = threading.Thread(target=reader, args=(proc.stdout, q))
+    t.daemon = True
+    t.start()
 
     deadline = time.monotonic() + _AGENT_TIMEOUT_SEC
-    while proc.poll() is None:
-        if check_abort and check_abort():
-            proc.kill()
-            return ""
-        if time.monotonic() > deadline:
-            proc.kill()
-            print(f"[Agent] Timed out after {_AGENT_TIMEOUT_SEC}s — killed.")
-            return ""
-        time.sleep(0.1)
+    output_lines = []
+    
+    while True:
+        try:
+            line = q.get(timeout=0.1)
+            output_lines.append(line)
+            if live_log_callback:
+                live_log_callback(line.rstrip('\n'))
+        except queue.Empty:
+            if proc.poll() is not None:
+                break
+            if check_abort and check_abort():
+                proc.kill()
+                return ""
+            if time.monotonic() > deadline:
+                proc.kill()
+                msg = f"[Agent] Timed out after {_AGENT_TIMEOUT_SEC}s — killed."
+                if live_log_callback:
+                    live_log_callback(msg)
+                print(msg)
+                return ""
 
-    stdout, stderr = proc.communicate()
+    # Drain remaining
+    while not q.empty():
+        line = q.get()
+        output_lines.append(line)
+        if live_log_callback:
+            live_log_callback(line.rstrip('\n'))
 
     if proc.returncode != 0:
-        print(f"[Agent] Error: {stderr.strip()[:200]}")
+        err = "".join(output_lines).strip()[:200]
+        print(f"[Agent] Error: {err}")
         return ""
 
-    return stdout.strip()
+    return "".join(output_lines).strip()
 
 
 def ask_agent(question_text: str, check_abort=None) -> str:
@@ -61,6 +93,7 @@ def ask_agent_google_forms_batch(
     screen_text: str,
     answered_questions: list[str],
     check_abort=None,
+    live_log_callback=None
 ) -> list[tuple[str, str]]:
     """
     Sends the screen text ONCE and receives ALL visible unanswered Q/A pairs in a
@@ -96,7 +129,7 @@ def ask_agent_google_forms_batch(
         f"Screen text:\n{trimmed}"
     )
 
-    reply = _run_agy(prompt, check_abort)
+    reply = _run_agy(prompt, check_abort, live_log_callback)
 
     if not reply or reply.strip().upper() == "DONE":
         return []
