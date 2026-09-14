@@ -4,6 +4,7 @@ import customtkinter as ctk
 import pyautogui
 import threading
 import csv
+import time
 from config import config
 from runner import Runner
 
@@ -56,11 +57,9 @@ class SelectionOverlay:
 class AppUI:
     def __init__(self):
         self.runner = Runner()
-        
         self.root = ctk.CTk()
         self.root.title("Auto Solver Pro")
-        # Expanded to fit the live log panel
-        self.root.geometry("480x600")
+        # We don't hardcode geometry here anymore; let it auto-wrap
         
         # Connect callbacks from the runner
         self.runner.on_finish_callback = self.on_runner_finished
@@ -86,24 +85,213 @@ class AppUI:
         
         self.region_lbl = ctk.CTkLabel(target_frame, text="Question Region: Not Set", font=PRO_FONT)
         self.region_lbl.pack(pady=(10, 2))
-        ctk.CTkButton(target_frame, text="Select Question Region", command=self.select_region, font=PRO_FONT, corner_radius=4).pack(pady=(0, 10))
+        self.region_btn = ctk.CTkButton(target_frame, text="Select Question Region", command=self.select_region, font=PRO_FONT, corner_radius=4)
+        self.region_btn.pack(pady=(0, 10))
         
         self.submit_lbl = ctk.CTkLabel(target_frame, text="Submit Button: Not Set", font=PRO_FONT)
         self.submit_lbl.pack(pady=2)
-        ctk.CTkButton(target_frame, text="Select Submit Pos & Color", command=self.select_submit, font=PRO_FONT, corner_radius=4).pack(pady=(0, 10))
+        self.submit_btn = ctk.CTkButton(target_frame, text="Select Submit Pos & Color", command=self.select_submit, font=PRO_FONT, corner_radius=4)
+        self.submit_btn.pack(pady=(0, 10))
         
-        # --- Preferences Toggle ---
-        self.settings_visible = False
-        self.settings_btn = ctk.CTkButton(self.root, text="⚙ Show Preferences", command=self.toggle_settings, 
-                                          fg_color="transparent", border_width=1, text_color=("gray20", "gray80"), font=PRO_FONT)
-        self.settings_btn.pack(pady=5)
+        # --- Native Top Menu Bar ---
+        self.menubar = tk.Menu(self.root)
+        self.root.config(menu=self.menubar)
         
-        # --- Settings Container (Hidden by default) ---
-        self.settings_frame = ctk.CTkScrollableFrame(self.root, corner_radius=6)
+        # File Menu
+        file_menu = tk.Menu(self.menubar, tearoff=0)
+        file_menu.add_command(label="Exit", command=self.root.quit)
+        self.menubar.add_cascade(label="File", menu=file_menu)
+        
+        # Edit Menu
+        edit_menu = tk.Menu(self.menubar, tearoff=0)
+        edit_menu.add_command(label="Targeting Options", command=self.select_region)
+        self.menubar.add_cascade(label="Edit", menu=edit_menu)
+        
+        # Preferences Menu
+        pref_menu = tk.Menu(self.menubar, tearoff=0)
+        pref_menu.add_command(label="Settings", command=self.open_settings_window)
+        pref_menu.add_separator()
+        pref_menu.add_command(label="Toggle Dark/Light Theme", command=self.toggle_theme)
+        pref_menu.add_command(label="View Quota", command=self.check_quota)
+        self.menubar.add_cascade(label="Preferences", menu=pref_menu)
+        
+        # --- Live Log Panel (Always visible below target frame/preferences) ---
+        self.log_header = ctk.CTkFrame(self.root, fg_color="transparent")
+        self.log_header.pack(fill="x", padx=30, pady=(10, 5))
+        
+        self.status_lbl = ctk.CTkLabel(self.log_header, text="Status: Idle", font=SUBHEADER_FONT)
+        self.status_lbl.pack(side="left")
+        
+        self.logs_visible = True
+        self.log_toggle_btn = ctk.CTkButton(self.log_header, text="▼ Hide Logs", width=80,
+                                            fg_color="transparent", text_color=("gray20", "gray80"),
+                                            hover_color=("gray85", "gray25"),
+                                            command=self.toggle_logs)
+        self.log_toggle_btn.pack(side="right")
+        
+        self.log_frame = ctk.CTkFrame(self.root, corner_radius=6)
+        self.log_frame.pack(fill="both", expand=True, pady=(0, 10), padx=20)
+        
+        self.log_font_size = 12
+        # Set a smaller default height so reqheight is small, allowing the window to shrink
+        self.log_box = ctk.CTkTextbox(self.log_frame, font=("Consolas", self.log_font_size), state="disabled", wrap="none", height=100)
+        
+        self.drag_handle = ctk.CTkFrame(self.log_frame, height=12, cursor="sb_v_double_arrow", fg_color="transparent")
+        grip = ctk.CTkFrame(self.drag_handle, height=4, width=50, fg_color=("gray60", "gray40"), corner_radius=2)
+        grip.pack(pady=4)
+        
+        self.drag_handle.bind("<ButtonPress-1>", self.on_drag_start)
+        self.drag_handle.bind("<B1-Motion>", self.on_drag_motion)
+        grip.bind("<ButtonPress-1>", self.on_drag_start)
+        grip.bind("<B1-Motion>", self.on_drag_motion)
+        
+        self.drag_handle.pack(fill="x", side="bottom")
+        self.log_box.pack(fill="both", expand=True, padx=10, pady=(0, 0))
+        
+        # Setup Log Colors
+        self.log_box.tag_config("green", foreground="#10b981")
+        self.log_box.tag_config("blue", foreground="#3b82f6")
+        self.log_box.tag_config("yellow", foreground="#f59e0b")
+        self.log_box.tag_config("red", foreground="#ef4444")
+        self.log_box.tag_config("gray", foreground="#9ca3af")
+        
+        # Setup Zoom and Horizontal Scroll
+        self.log_box.bind("<Control-MouseWheel>", self.on_log_zoom)
+        self.log_box.bind("<Shift-MouseWheel>", self.on_log_hscroll)
+        
+        # Status Animation State
+        self.current_status_text = "Idle"
+        self.current_status_start = time.time()
+        self.dot_count = 0
+        self.is_animating = True
+        self._animate_status()
+        
+        # --- Footer ---
+        self.info_lbl = ctk.CTkLabel(self.root, text="F8 = Pause/Resume  |  ESC = Stop", font=PRO_FONT, text_color="gray")
+        self.info_lbl.pack(pady=(10, 5))
+        
+        self.start_btn = ctk.CTkButton(self.root, text="Start Automation", font=SUBHEADER_FONT, 
+                                       height=45, corner_radius=6, command=self.start_automation)
+        self.start_btn.pack(pady=(0, 10), padx=40, fill="x")
+        
+        # Open with a spacious default size
+        self.root.geometry("480x730")
+        
+        # Apply initial layout and color theme based on config
+        self.on_mode_changed(config.work_mode)
+        
+        # Lock minimum size to prevent clipping bottom elements (UI + ~100px log box)
+        self.root.update_idletasks()
+        self.root.wm_minsize(self.root.winfo_reqwidth(), self.root.winfo_reqheight())
+
+    def on_log_zoom(self, event):
+        if event.delta > 0:
+            self.log_font_size = min(30, self.log_font_size + 1)
+        else:
+            self.log_font_size = max(6, self.log_font_size - 1)
+        self.log_box.configure(font=("Consolas", self.log_font_size))
+
+    def on_log_hscroll(self, event):
+        self.log_box._textbox.xview_scroll(int(-1*(event.delta/120)), "units")
+
+    def _animate_status(self):
+        if not self.is_animating: return
+        
+        elapsed = time.time() - self.current_status_start
+        self.dot_count = (self.dot_count + 1) % 4
+        dots = "." * self.dot_count
+        
+        # No animation or timer for Idle/Stopped
+        if self.current_status_text in ["Idle", "Stopped", "Finished"]:
+            self.status_lbl.configure(text=f"Status: {self.current_status_text}")
+        else:
+            self.status_lbl.configure(text=f"Status: [{elapsed:.1f}s] {self.current_status_text}{dots}")
+            
+        self.root.after(250, self._animate_status)
+
+    def on_runner_log(self, msg: str, color: str = None):
+        self.root.after(0, self._append_log, msg, color)
+        
+    def _append_log(self, msg: str, color: str = None):
+        self.log_box.configure(state="normal")
+        if color:
+            self.log_box.insert("end", msg + "\n", color)
+        else:
+            self.log_box.insert("end", msg + "\n")
+        self.log_box.see("end")
+        self.log_box.configure(state="disabled")
+        
+    def on_runner_status(self, status: str):
+        self.root.after(0, self._update_status, status)
+        
+    def _update_status(self, status: str):
+        self.current_status_text = status
+        self.current_status_start = time.time()
+        self.dot_count = 0
+        self.status_lbl.configure(text=f"Status: [0.0s] {self.current_status_text}")
+
+    def on_drag_start(self, event):
+        self._drag_start_y = event.y_root
+        self._start_height = self.root.winfo_height()
+        
+    def on_drag_motion(self, event):
+        delta = event.y_root - self._drag_start_y
+        new_height = max(self.root.wm_minsize()[1], self._start_height + delta)
+        self.root.wm_geometry(f"{self.root.winfo_width()}x{new_height}")
+
+    def toggle_logs(self):
+        # Relax minimum size so the window is allowed to shrink
+        self.root.wm_minsize(self.root.winfo_reqwidth(), 200)
+        
+        # Capture current exact width and screen position
+        w = self.root.winfo_width()
+        x = self.root.winfo_x()
+        y = self.root.winfo_y()
+        
+        if self.logs_visible:
+            # Save ONLY the height before collapsing to prevent teleporting
+            self.expanded_height = self.root.winfo_height()
+            
+            self.log_frame.pack_forget()
+            self.log_toggle_btn.configure(text="▶ Show Logs")
+            self.logs_visible = False
+            
+            # Snap to exact required height while strictly keeping width and position
+            self.root.update_idletasks()
+            req_h = self.root.winfo_reqheight()
+            self.root.wm_geometry(f"{w}x{req_h}+{x}+{y}")
+            self.root.wm_minsize(self.root.winfo_reqwidth(), req_h)
+        else:
+            self.log_frame.pack(fill="both", expand=True, pady=(0, 10), padx=20, before=self.info_lbl)
+            self.log_toggle_btn.configure(text="▼ Hide Logs")
+            self.logs_visible = True
+            
+            self.root.update_idletasks()
+            req_h = self.root.winfo_reqheight()
+            
+            # Restore previous height, ensuring it's at least the new required minimum
+            target_h = getattr(self, 'expanded_height', max(750, req_h))
+            target_h = max(req_h, target_h)
+            
+            self.root.wm_geometry(f"{w}x{target_h}+{x}+{y}")
+            self.root.wm_minsize(self.root.winfo_reqwidth(), req_h)
+
+    def open_settings_window(self):
+        if hasattr(self, "settings_win") and self.settings_win.winfo_exists():
+            self.settings_win.focus()
+            return
+            
+        self.settings_win = ctk.CTkToplevel(self.root)
+        self.settings_win.title("Preferences")
+        self.settings_win.geometry("500x650")
+        self.settings_win.attributes('-topmost', True)
+        
+        frame = ctk.CTkScrollableFrame(self.settings_win, corner_radius=6)
+        frame.pack(fill="both", expand=True, padx=10, pady=10)
         
         # AI Settings
-        ctk.CTkLabel(self.settings_frame, text="AI Model Settings", font=SUBHEADER_FONT).pack(pady=(10, 5))
-        model_inner = ctk.CTkFrame(self.settings_frame, fg_color="transparent")
+        ctk.CTkLabel(frame, text="AI Model Settings", font=SUBHEADER_FONT).pack(pady=(10, 5))
+        model_inner = ctk.CTkFrame(frame, fg_color="transparent")
         model_inner.pack(fill="x", padx=10, pady=5)
         
         self.model_combo = ctk.CTkOptionMenu(model_inner, values=[
@@ -116,94 +304,69 @@ class AppUI:
         ctk.CTkButton(model_inner, text="View Quota", command=self.check_quota, width=80, font=PRO_FONT).pack(side="right")
         
         # Engine Config
-        ctk.CTkLabel(self.settings_frame, text="Engine Configuration", font=SUBHEADER_FONT).pack(pady=(15, 5))
+        ctk.CTkLabel(frame, text="Engine Configuration", font=SUBHEADER_FONT).pack(pady=(15, 5))
         
-        delay_frame = ctk.CTkFrame(self.settings_frame, fg_color="transparent")
+        delay_frame = ctk.CTkFrame(frame, fg_color="transparent")
         delay_frame.pack(fill="x", pady=5, padx=10)
         ctk.CTkLabel(delay_frame, text="Thinking Delay (sec):", font=PRO_FONT).pack(side="left")
         self.thinking_delay_entry = ctk.CTkEntry(delay_frame, width=80, justify="center", font=PRO_FONT)
         self.thinking_delay_entry.insert(0, str(config.thinking_delay))
         self.thinking_delay_entry.pack(side="right")
         
-        scroll_frame = ctk.CTkFrame(self.settings_frame, fg_color="transparent")
+        scroll_frame = ctk.CTkFrame(frame, fg_color="transparent")
         scroll_frame.pack(fill="x", pady=5, padx=10)
         ctk.CTkLabel(scroll_frame, text="Scroll Amount (wheel notches):", font=PRO_FONT).pack(side="left")
         self.scroll_amount_entry = ctk.CTkEntry(scroll_frame, width=80, justify="center", font=PRO_FONT)
         self.scroll_amount_entry.insert(0, str(config.scroll_amount))
         self.scroll_amount_entry.pack(side="right")
 
-        ocr_lang_frame = ctk.CTkFrame(self.settings_frame, fg_color="transparent")
+        ocr_lang_frame = ctk.CTkFrame(frame, fg_color="transparent")
         ocr_lang_frame.pack(fill="x", pady=5, padx=10)
         ctk.CTkLabel(ocr_lang_frame, text="OCR Language (e.g. ukr+rus+eng):", font=PRO_FONT).pack(anchor="w")
         self.ocr_lang_entry = ctk.CTkEntry(ocr_lang_frame, width=200, font=PRO_FONT)
         self.ocr_lang_entry.insert(0, config.ocr_language)
         self.ocr_lang_entry.pack(fill="x", pady=(2, 5))
         
-        ocr_frame = ctk.CTkFrame(self.settings_frame, fg_color="transparent")
+        ocr_frame = ctk.CTkFrame(frame, fg_color="transparent")
         ocr_frame.pack(fill="x", pady=5, padx=10)
         ctk.CTkLabel(ocr_frame, text="Tesseract Path:", font=PRO_FONT).pack(anchor="w")
         self.tesseract_entry = ctk.CTkEntry(ocr_frame, width=350, font=PRO_FONT)
         self.tesseract_entry.insert(0, config.tesseract_path)
         self.tesseract_entry.pack(fill="x", pady=(2, 5))
         
-        # Theme Toggle
-        theme_frame = ctk.CTkFrame(self.settings_frame, fg_color="transparent")
-        theme_frame.pack(fill="x", pady=(15, 10), padx=10)
-        ctk.CTkLabel(theme_frame, text="App Theme:", font=PRO_FONT).pack(side="left")
-        self.theme_switch = ctk.CTkSwitch(theme_frame, text="Dark Mode", font=PRO_FONT, command=self.toggle_theme)
-        self.theme_switch.select()
-        self.theme_switch.pack(side="right")
+        self.timings_var = ctk.BooleanVar(value=config.show_step_timings)
+        self.timings_cb = ctk.CTkCheckBox(frame, text="Show Step Timings in Log", variable=self.timings_var, font=PRO_FONT)
+        self.timings_cb.pack(fill="x", pady=(10, 5), padx=10)
         
-        # --- Live Log Panel (Always visible below target frame/preferences) ---
-        self.log_frame = ctk.CTkFrame(self.root, corner_radius=6)
-        self.log_frame.pack(fill="both", expand=True, pady=10, padx=20)
-        
-        self.status_lbl = ctk.CTkLabel(self.log_frame, text="Status: 🛑 Idle", font=SUBHEADER_FONT)
-        self.status_lbl.pack(pady=(10, 5), padx=10, anchor="w")
-        
-        self.log_box = ctk.CTkTextbox(self.log_frame, font=("Consolas", 12), state="disabled")
-        self.log_box.pack(fill="both", expand=True, padx=10, pady=(0, 10))
-        
-        # --- Footer ---
-        info_lbl = ctk.CTkLabel(self.root, text="F8 = Pause/Resume  |  ESC = Stop", font=PRO_FONT, text_color="gray")
-        info_lbl.pack(pady=(10, 5))
-        
-        self.start_btn = ctk.CTkButton(self.root, text="Start Automation", font=SUBHEADER_FONT, 
-                                       height=45, corner_radius=6, command=self.start_automation)
-        self.start_btn.pack(pady=(0, 20), padx=40, fill="x")
+        def save_and_close():
+            try:
+                delay_val = float(self.thinking_delay_entry.get().strip())
+                if delay_val < 0: raise ValueError()
+                config.thinking_delay = delay_val
+            except ValueError:
+                messagebox.showerror("Error", "Thinking Delay must be a positive number or 0.", parent=self.settings_win)
+                return
+                
+            try:
+                scroll_val = int(self.scroll_amount_entry.get().strip())
+                if scroll_val < 1: raise ValueError()
+                config.scroll_amount = scroll_val
+            except ValueError:
+                messagebox.showerror("Error", "Scroll Amount must be a positive integer (minimum 1).", parent=self.settings_win)
+                return
+                
+            config.tesseract_path = self.tesseract_entry.get().strip()
+            config.ocr_language = self.ocr_lang_entry.get().strip() or "eng"
+            config.model = self.model_combo.get().strip()
+            config.show_step_timings = self.timings_var.get()
+            
+            self.settings_win.destroy()
 
-    def on_runner_log(self, msg: str):
-        # Safely interact with Tkinter UI from the background thread
-        self.root.after(0, self._append_log, msg)
-        
-    def _append_log(self, msg: str):
-        self.log_box.configure(state="normal")
-        self.log_box.insert("end", msg + "\n")
-        self.log_box.see("end")
-        self.log_box.configure(state="disabled")
-        
-    def on_runner_status(self, status: str):
-        # Safely interact with Tkinter UI from the background thread
-        self.root.after(0, self._update_status, status)
-        
-    def _update_status(self, status: str):
-        self.status_lbl.configure(text=f"Status: {status}")
-
-    def toggle_settings(self):
-        if self.settings_visible:
-            self.settings_frame.pack_forget()
-            self.settings_btn.configure(text="⚙ Show Preferences")
-            self.settings_visible = False
-            self.root.geometry("480x600")
-        else:
-            # Insert settings before log frame so logs remain at bottom
-            self.settings_frame.pack(pady=5, padx=20, fill="both", expand=True, before=self.log_frame)
-            self.settings_btn.configure(text="⚙ Hide Preferences")
-            self.settings_visible = True
-            self.root.geometry("480x850")
+        ctk.CTkButton(self.settings_win, text="Save & Close", font=SUBHEADER_FONT, height=40, command=save_and_close).pack(pady=10)
 
     def toggle_theme(self):
-        if self.theme_switch.get() == 1:
+        current = ctk.get_appearance_mode()
+        if current == "Light":
             ctk.set_appearance_mode("Dark")
         else:
             ctk.set_appearance_mode("Light")
@@ -297,15 +460,50 @@ class AppUI:
         overlay.bind('<Return>', wait_for_enter)
         overlay.focus_force()
 
+    def _get_theme_colors(self):
+        if config.work_mode == "Google Forms":
+            # Light Purple theme for Google Forms
+            return ["#a855f7", "#9333ea"], ["#9333ea", "#7e22ce"]
+        # Classic Blue theme
+        return ["#3B8ED0", "#1F6AA5"], ["#36719F", "#144870"]
+
+    def _apply_theme_colors(self):
+        fg, hover = self._get_theme_colors()
+        self.mode_combo.configure(fg_color=fg, button_color=fg, button_hover_color=hover)
+        self.region_btn.configure(fg_color=fg, hover_color=hover)
+        self.submit_btn.configure(fg_color=fg, hover_color=hover)
+        
+        # Only update start_btn if it's not currently red (running)
+        if not self.runner.is_running:
+            self.start_btn.configure(fg_color=fg, hover_color=hover)
+
     def on_mode_changed(self, new_mode):
         config.work_mode = new_mode
+        self._apply_theme_colors()
+        
         if new_mode == "Google Forms":
-            self.submit_lbl.configure(text="Submit Button: Not needed for Google Forms", text_color="gray")
+            # Completely hide the submit button and label
+            self.submit_lbl.pack_forget()
+            self.submit_btn.pack_forget()
         else:
+            # Show the submit button and label again
+            self.submit_lbl.pack(pady=2)
+            self.submit_btn.pack(pady=(0, 10))
+            
             if config.submit_button_pos:
                 self.submit_lbl.configure(text=f"Submit: {config.submit_button_pos} | RGB: {config.submit_button_color}", text_color=("gray10", "gray90"))
             else:
                 self.submit_lbl.configure(text="Submit Button: Not Set", text_color=("gray10", "gray90"))
+                
+        # Snap the window dynamically to prevent empty spaces when hiding/showing elements
+        self.root.update_idletasks()
+        req_h = self.root.winfo_reqheight()
+        self.root.wm_minsize(self.root.winfo_reqwidth(), req_h)
+        if not self.logs_visible:
+            w = self.root.winfo_width()
+            x = self.root.winfo_x()
+            y = self.root.winfo_y()
+            self.root.wm_geometry(f"{w}x{req_h}+{x}+{y}")
 
     def start_automation(self):
         if not config.question_region:
@@ -315,33 +513,11 @@ class AppUI:
         if config.work_mode == "Standard" and not config.submit_button_pos:
             messagebox.showerror("Error", "Please select the submit position for Standard mode.")
             return
-            
-        try:
-            delay_val = float(self.thinking_delay_entry.get().strip())
-            if delay_val < 0:
-                raise ValueError()
-            config.thinking_delay = delay_val
-        except ValueError:
-            messagebox.showerror("Error", "Thinking Delay must be a positive number or 0.")
-            return
-            
-        try:
-            scroll_val = int(self.scroll_amount_entry.get().strip())
-            if scroll_val < 1:
-                raise ValueError()
-            config.scroll_amount = scroll_val
-        except ValueError:
-            messagebox.showerror("Error", "Scroll Amount must be a positive integer (minimum 1).")
-            return
-            
-        # Update config with UI values
-        config.tesseract_path = self.tesseract_entry.get().strip()
-        config.ocr_language = self.ocr_lang_entry.get().strip() or "eng"
-        config.model = self.model_combo.get().strip()
         
         if self.runner.is_running:
             self.runner.is_running = False
-            self.start_btn.configure(text="Start Automation", fg_color=["#3B8ED0", "#1F6AA5"], hover_color=["#36719F", "#144870"])
+            self.start_btn.configure(text="Start Automation")
+            self._apply_theme_colors()
             return
             
         self.start_btn.configure(text="Stop Automation", fg_color="#ef4444", hover_color="#b91c1c")
@@ -358,7 +534,8 @@ class AppUI:
     def run_wrapper(self):
         self.runner.run_loop()
         # Once stopped, reset button and status
-        self.root.after(0, lambda: self.start_btn.configure(text="Start Automation", fg_color=["#3B8ED0", "#1F6AA5"], hover_color=["#36719F", "#144870"]))
+        self.root.after(0, lambda: self.start_btn.configure(text="Start Automation"))
+        self.root.after(0, self._apply_theme_colors)
         self.root.after(0, lambda: self._update_status("🛑 Idle"))
 
     def run(self):
