@@ -118,18 +118,33 @@ class AppUI:
         self.menubar.add_cascade(label="Preferences", menu=pref_menu)
         
         # --- Live Log Panel (Always visible below target frame/preferences) ---
-        self.log_header = ctk.CTkFrame(self.root, fg_color="transparent")
-        self.log_header.pack(fill="x", padx=30, pady=(10, 5))
+        self.log_header_frame = ctk.CTkFrame(self.root, fg_color="transparent")
+        self.log_header_frame.pack(fill="x", padx=20, pady=(10, 0))
         
-        self.status_lbl = ctk.CTkLabel(self.log_header, text="Status: Idle", font=SUBHEADER_FONT)
+        self.status_lbl = ctk.CTkLabel(self.log_header_frame, text="Status: 🛑 Idle", font=PRO_FONT)
         self.status_lbl.pack(side="left")
         
         self.logs_visible = True
-        self.log_toggle_btn = ctk.CTkButton(self.log_header, text="▼ Hide Logs", width=80,
-                                            fg_color="transparent", text_color=("gray20", "gray80"),
-                                            hover_color=("gray85", "gray25"),
+        self.log_toggle_btn = ctk.CTkButton(self.log_header_frame, text="▼ Hide Logs", width=80, 
+                                            height=24, font=("Segoe UI", 11), 
+                                            fg_color="transparent", text_color=("gray30", "gray70"), 
+                                            hover_color=("gray85", "gray25"), 
                                             command=self.toggle_logs)
         self.log_toggle_btn.pack(side="right")
+        
+        self.clear_log_btn = ctk.CTkButton(self.log_header_frame, text="🗑", width=24, 
+                                            height=24, font=("Segoe UI", 14), 
+                                            fg_color="transparent", text_color=("gray30", "gray70"), 
+                                            hover_color=("gray85", "gray25"), 
+                                            command=self.clear_logs)
+        self.clear_log_btn.pack(side="right", padx=(0, 5))
+        
+        self.copy_log_btn = ctk.CTkButton(self.log_header_frame, text="📋", width=24, 
+                                            height=24, font=("Segoe UI", 14), 
+                                            fg_color="transparent", text_color=("gray30", "gray70"), 
+                                            hover_color=("gray85", "gray25"), 
+                                            command=self.copy_logs)
+        self.copy_log_btn.pack(side="right", padx=(0, 5))
         
         self.log_frame = ctk.CTkFrame(self.root, corner_radius=6)
         self.log_frame.pack(fill="both", expand=True, pady=(0, 10), padx=20)
@@ -277,6 +292,22 @@ class AppUI:
             
             self.root.wm_geometry(f"{w}x{target_h}+{x}+{y}")
             self.root.wm_minsize(self.root.winfo_reqwidth(), req_h)
+
+    def copy_logs(self):
+        log_text = self.log_box.get("1.0", "end-1c")
+        if not log_text.strip():
+            return
+        self.root.clipboard_clear()
+        self.root.clipboard_append(log_text)
+        self.copy_log_btn.configure(text="✔", text_color="#10b981")
+        self.root.after(1500, lambda: self.copy_log_btn.configure(text="📋", text_color=("gray30", "gray70")))
+
+    def clear_logs(self):
+        self.log_box.configure(state="normal")
+        self.log_box.delete("1.0", "end")
+        self.log_box.configure(state="disabled")
+        self.clear_log_btn.configure(text="✔", text_color="#10b981")
+        self.root.after(1500, lambda: self.clear_log_btn.configure(text="🗑", text_color=("gray30", "gray70")))
 
     def open_settings_window(self):
         if hasattr(self, "settings_win") and self.settings_win.winfo_exists():
