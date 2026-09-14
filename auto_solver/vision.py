@@ -45,7 +45,14 @@ class VisionHandler:
             custom_config = r'--psm 11' # Sparse text mode is much better for finding buttons in large areas
 
         try:
-            data = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT, config=custom_config)
+            # Refresh path from config in case user changed it after init
+            pytesseract.pytesseract.tesseract_cmd = config.tesseract_path
+            data = pytesseract.image_to_data(
+                img,
+                output_type=pytesseract.Output.DICT,
+                config=custom_config,
+                lang=config.ocr_language,
+            )
         except FileNotFoundError:
             raise RuntimeError(f"Tesseract executable not found at {config.tesseract_path}. Please install Tesseract OCR and update the path in config.py if necessary.")
             
@@ -70,7 +77,8 @@ class VisionHandler:
         return full_text, word_boxes
 
     def _normalize_text(self, text: str) -> str:
-        return re.sub(r'[^a-z0-9]', '', text.lower())
+        # Preserve all unicode word characters (including Cyrillic/Ukrainian); strip only punctuation and whitespace
+        return re.sub(r'[^\w]', '', text.lower(), flags=re.UNICODE)
 
     def find_click_point(self, answer_text: str, word_boxes: List[Dict]) -> Optional[Tuple[int, int]]:
         """

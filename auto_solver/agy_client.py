@@ -1,10 +1,52 @@
 import subprocess
 import time
+import re
 from config import config
+
+# Maximum seconds to wait for an agy subprocess before killing it and retrying
+_AGENT_TIMEOUT_SEC: int = 45
+# Maximum characters of screen text sent to the agent to keep prompts lean
+_SCREEN_TEXT_MAX_CHARS: int = 3000
+
+
+def _run_agy(prompt: str, check_abort=None) -> str:
+    """
+    Spawns a single agy subprocess, polls until it exits, and returns stdout.
+    Kills the process if stop is requested or the call exceeds _AGENT_TIMEOUT_SEC.
+    Returns empty string on any failure.
+    """
+    proc = subprocess.Popen(
+        ["agy", "--print", prompt, "--model", config.model, "--continue"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+    )
+
+    deadline = time.monotonic() + _AGENT_TIMEOUT_SEC
+    while proc.poll() is None:
+        if check_abort and check_abort():
+            proc.kill()
+            return ""
+        if time.monotonic() > deadline:
+            proc.kill()
+            print(f"[Agent] Timed out after {_AGENT_TIMEOUT_SEC}s — killed.")
+            return ""
+        time.sleep(0.1)
+
+    stdout, stderr = proc.communicate()
+
+    if proc.returncode != 0:
+        print(f"[Agent] Error: {stderr.strip()[:200]}")
+        return ""
+
+    return stdout.strip()
+
 
 def ask_agent(question_text: str, check_abort=None) -> str:
     """
-    Sends the question text to the Antigravity CLI and returns the correct answer text.
+    Sends a single multiple-choice question to the agent and returns the answer text only.
+    Used by Standard mode.
     """
     prompt = (
         "Here is a new multiple-choice question. "
@@ -12,26 +54,76 @@ def ask_agent(question_text: str, check_abort=None) -> str:
         "NO explanation. NO extra words. Just the answer text.\n\n"
         f"{question_text}"
     )
-    
-    # Run the agy CLI non-interactively but using the same session
-    proc = subprocess.Popen(
-        ["agy", "--print", prompt, "--model", config.model, "--continue"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        encoding="utf-8"
+    return _run_agy(prompt, check_abort)
+
+
+def ask_agent_google_forms_batch(
+    screen_text: str,
+    answered_questions: list[str],
+    check_abort=None,
+) -> list[tuple[str, str]]:
+    """
+    Sends the screen text ONCE and receives ALL visible unanswered Q/A pairs in a
+    single LLM round-trip. One call per screen instead of one call per question.
+
+    Returns a list of (question, answer) tuples in order.
+    Returns an empty list when the agent signals DONE or on any error.
+    """
+    # Trim screen text to keep prompt size bounded and response fast
+    trimmed = screen_text[:_SCREEN_TEXT_MAX_CHARS]
+
+    answered_str = (
+        "\n".join(f"- {q}" for q in answered_questions)
+        if answered_questions
+        else "None"
     )
-    
-    while proc.poll() is None:
-        if check_abort and check_abort():
-            proc.kill()
-            return ""
-        time.sleep(0.1)
-        
-    stdout, stderr = proc.communicate()
-    
-    if proc.returncode != 0:
-        print(f"Error from agy CLI: {stderr}")
-        return ""
-        
-    return stdout.strip()
+
+    prompt = (
+        "You are a form answering engine reading OCR text from a Google Form.\n"
+        "Find ALL multiple-choice questions visible that are NOT in the answered list.\n\n"
+        "OUTPUT FORMAT — one block per question, nothing else:\n"
+        "Q: <question text verbatim>\n"
+        "A: <correct answer verbatim>\n\n"
+        "STRICT RULES:\n"
+        "- Output ONLY Q:/A: line pairs. No numbers, no markdown, no explanation.\n"
+        "- If no unanswered questions are visible, output only: DONE\n\n"
+        "Example (2 questions):\n"
+        "Q: What is the capital of France?\n"
+        "A: Paris\n"
+        "Q: Who wrote Hamlet?\n"
+        "A: William Shakespeare\n\n"
+        f"Already answered:\n{answered_str}\n\n"
+        f"Screen text:\n{trimmed}"
+    )
+
+    reply = _run_agy(prompt, check_abort)
+
+    if not reply or reply.strip().upper() == "DONE":
+        return []
+
+    return _parse_batch_reply(reply)
+
+
+def _parse_batch_reply(reply: str) -> list[tuple[str, str]]:
+    """
+    Parses alternating Q:/A: lines into (question, answer) tuples.
+    Tolerates extra whitespace and case variations.
+    """
+    pairs: list[tuple[str, str]] = []
+    current_q: str | None = None
+
+    for raw_line in reply.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+
+        q_match = re.match(r'^[Qq]\s*:\s*(.+)', line)
+        a_match = re.match(r'^[Aa]\s*:\s*(.+)', line)
+
+        if q_match:
+            current_q = q_match.group(1).strip()
+        elif a_match and current_q is not None:
+            pairs.append((current_q, a_match.group(1).strip()))
+            current_q = None
+
+    return pairs

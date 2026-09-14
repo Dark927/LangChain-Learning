@@ -1,8 +1,9 @@
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, filedialog
 import customtkinter as ctk
 import pyautogui
 import threading
+import csv
 from config import config
 from runner import Runner
 
@@ -58,12 +59,26 @@ class AppUI:
         
         self.root = ctk.CTk()
         self.root.title("Auto Solver Pro")
-        # Start with a compact UI
-        self.root.geometry("450x380")
+        # Expanded to fit the live log panel
+        self.root.geometry("480x600")
+        
+        # Connect callbacks from the runner
+        self.runner.on_finish_callback = self.on_runner_finished
+        self.runner.on_log_callback = self.on_runner_log
+        self.runner.on_status_callback = self.on_runner_status
         
         # Header
         self.header = ctk.CTkLabel(self.root, text="Auto Solver Pro", font=HEADER_FONT)
         self.header.pack(pady=(15, 5))
+
+        # Work Mode Selection
+        mode_frame = ctk.CTkFrame(self.root, fg_color="transparent")
+        mode_frame.pack(fill="x", padx=20, pady=5)
+        ctk.CTkLabel(mode_frame, text="Work Mode:", font=SUBHEADER_FONT).pack(side="left")
+        self.mode_combo = ctk.CTkOptionMenu(mode_frame, values=["Standard", "Google Forms"], 
+                                            command=self.on_mode_changed, font=PRO_FONT)
+        self.mode_combo.set(config.work_mode)
+        self.mode_combo.pack(side="right", fill="x", expand=True, padx=(10, 0))
         
         # --- Targeting Section (Always Visible) ---
         target_frame = ctk.CTkFrame(self.root, corner_radius=6)
@@ -110,6 +125,20 @@ class AppUI:
         self.thinking_delay_entry.insert(0, str(config.thinking_delay))
         self.thinking_delay_entry.pack(side="right")
         
+        scroll_frame = ctk.CTkFrame(self.settings_frame, fg_color="transparent")
+        scroll_frame.pack(fill="x", pady=5, padx=10)
+        ctk.CTkLabel(scroll_frame, text="Scroll Amount (wheel notches):", font=PRO_FONT).pack(side="left")
+        self.scroll_amount_entry = ctk.CTkEntry(scroll_frame, width=80, justify="center", font=PRO_FONT)
+        self.scroll_amount_entry.insert(0, str(config.scroll_amount))
+        self.scroll_amount_entry.pack(side="right")
+
+        ocr_lang_frame = ctk.CTkFrame(self.settings_frame, fg_color="transparent")
+        ocr_lang_frame.pack(fill="x", pady=5, padx=10)
+        ctk.CTkLabel(ocr_lang_frame, text="OCR Language (e.g. ukr+rus+eng):", font=PRO_FONT).pack(anchor="w")
+        self.ocr_lang_entry = ctk.CTkEntry(ocr_lang_frame, width=200, font=PRO_FONT)
+        self.ocr_lang_entry.insert(0, config.ocr_language)
+        self.ocr_lang_entry.pack(fill="x", pady=(2, 5))
+        
         ocr_frame = ctk.CTkFrame(self.settings_frame, fg_color="transparent")
         ocr_frame.pack(fill="x", pady=5, padx=10)
         ctk.CTkLabel(ocr_frame, text="Tesseract Path:", font=PRO_FONT).pack(anchor="w")
@@ -125,6 +154,16 @@ class AppUI:
         self.theme_switch.select()
         self.theme_switch.pack(side="right")
         
+        # --- Live Log Panel (Always visible below target frame/preferences) ---
+        self.log_frame = ctk.CTkFrame(self.root, corner_radius=6)
+        self.log_frame.pack(fill="both", expand=True, pady=10, padx=20)
+        
+        self.status_lbl = ctk.CTkLabel(self.log_frame, text="Status: 🛑 Idle", font=SUBHEADER_FONT)
+        self.status_lbl.pack(pady=(10, 5), padx=10, anchor="w")
+        
+        self.log_box = ctk.CTkTextbox(self.log_frame, font=("Consolas", 12), state="disabled")
+        self.log_box.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        
         # --- Footer ---
         info_lbl = ctk.CTkLabel(self.root, text="F8 = Pause/Resume  |  ESC = Stop", font=PRO_FONT, text_color="gray")
         info_lbl.pack(pady=(10, 5))
@@ -133,17 +172,35 @@ class AppUI:
                                        height=45, corner_radius=6, command=self.start_automation)
         self.start_btn.pack(pady=(0, 20), padx=40, fill="x")
 
+    def on_runner_log(self, msg: str):
+        # Safely interact with Tkinter UI from the background thread
+        self.root.after(0, self._append_log, msg)
+        
+    def _append_log(self, msg: str):
+        self.log_box.configure(state="normal")
+        self.log_box.insert("end", msg + "\n")
+        self.log_box.see("end")
+        self.log_box.configure(state="disabled")
+        
+    def on_runner_status(self, status: str):
+        # Safely interact with Tkinter UI from the background thread
+        self.root.after(0, self._update_status, status)
+        
+    def _update_status(self, status: str):
+        self.status_lbl.configure(text=f"Status: {status}")
+
     def toggle_settings(self):
         if self.settings_visible:
             self.settings_frame.pack_forget()
             self.settings_btn.configure(text="⚙ Show Preferences")
             self.settings_visible = False
-            self.root.geometry("450x380")
+            self.root.geometry("480x600")
         else:
-            self.settings_frame.pack(pady=5, padx=20, fill="both", expand=True, before=self.start_btn)
+            # Insert settings before log frame so logs remain at bottom
+            self.settings_frame.pack(pady=5, padx=20, fill="both", expand=True, before=self.log_frame)
             self.settings_btn.configure(text="⚙ Hide Preferences")
             self.settings_visible = True
-            self.root.geometry("450x700")
+            self.root.geometry("480x850")
 
     def toggle_theme(self):
         if self.theme_switch.get() == 1:
@@ -240,9 +297,23 @@ class AppUI:
         overlay.bind('<Return>', wait_for_enter)
         overlay.focus_force()
 
+    def on_mode_changed(self, new_mode):
+        config.work_mode = new_mode
+        if new_mode == "Google Forms":
+            self.submit_lbl.configure(text="Submit Button: Not needed for Google Forms", text_color="gray")
+        else:
+            if config.submit_button_pos:
+                self.submit_lbl.configure(text=f"Submit: {config.submit_button_pos} | RGB: {config.submit_button_color}", text_color=("gray10", "gray90"))
+            else:
+                self.submit_lbl.configure(text="Submit Button: Not Set", text_color=("gray10", "gray90"))
+
     def start_automation(self):
-        if not config.question_region or not config.submit_button_pos:
-            messagebox.showerror("Error", "Please select both the question region and submit position first.")
+        if not config.question_region:
+            messagebox.showerror("Error", "Please select the question region first.")
+            return
+            
+        if config.work_mode == "Standard" and not config.submit_button_pos:
+            messagebox.showerror("Error", "Please select the submit position for Standard mode.")
             return
             
         try:
@@ -254,8 +325,18 @@ class AppUI:
             messagebox.showerror("Error", "Thinking Delay must be a positive number or 0.")
             return
             
+        try:
+            scroll_val = int(self.scroll_amount_entry.get().strip())
+            if scroll_val < 1:
+                raise ValueError()
+            config.scroll_amount = scroll_val
+        except ValueError:
+            messagebox.showerror("Error", "Scroll Amount must be a positive integer (minimum 1).")
+            return
+            
         # Update config with UI values
         config.tesseract_path = self.tesseract_entry.get().strip()
+        config.ocr_language = self.ocr_lang_entry.get().strip() or "eng"
         config.model = self.model_combo.get().strip()
         
         if self.runner.is_running:
@@ -265,14 +346,65 @@ class AppUI:
             
         self.start_btn.configure(text="Stop Automation", fg_color="#ef4444", hover_color="#b91c1c")
         
+        # Clear log box
+        self.log_box.configure(state="normal")
+        self.log_box.delete("1.0", "end")
+        self.log_box.configure(state="disabled")
+        
         # Run in background thread
         self.runner_thread = threading.Thread(target=self.run_wrapper, daemon=True)
         self.runner_thread.start()
         
     def run_wrapper(self):
         self.runner.run_loop()
-        # Once stopped, reset button
+        # Once stopped, reset button and status
         self.root.after(0, lambda: self.start_btn.configure(text="Start Automation", fg_color=["#3B8ED0", "#1F6AA5"], hover_color=["#36719F", "#144870"]))
+        self.root.after(0, lambda: self._update_status("🛑 Idle"))
 
     def run(self):
         self.root.mainloop()
+        
+    def on_runner_finished(self):
+        if config.work_mode == "Google Forms" and self.runner.qa_log:
+            self.root.after(0, self.show_qa_log_dashboard)
+
+    def show_qa_log_dashboard(self):
+        dashboard = ctk.CTkToplevel(self.root)
+        dashboard.title("QA Session Log")
+        dashboard.geometry("650x550")
+        dashboard.attributes('-topmost', True)
+        
+        header_frame = ctk.CTkFrame(dashboard, fg_color="transparent")
+        header_frame.pack(fill="x", padx=20, pady=15)
+        
+        ctk.CTkLabel(header_frame, text="Session Q&A Log", font=HEADER_FONT).pack(side="left")
+        ctk.CTkButton(header_frame, text="Export to CSV", font=PRO_FONT, command=self.export_report).pack(side="right")
+        
+        scroll = ctk.CTkScrollableFrame(dashboard)
+        scroll.pack(padx=20, pady=10, fill="both", expand=True)
+        
+        for idx, entry in enumerate(self.runner.qa_log, start=1):
+            frame = ctk.CTkFrame(scroll, corner_radius=5)
+            frame.pack(fill="x", pady=5, padx=5)
+            
+            ctk.CTkLabel(frame, text=f"Q{idx}: {entry['question']}", font=SUBHEADER_FONT, justify="left", wraplength=550).pack(anchor="w", padx=10, pady=(10, 5))
+            ctk.CTkLabel(frame, text=f"A: {entry['answer']}", font=PRO_FONT, text_color="#10b981", justify="left", wraplength=550).pack(anchor="w", padx=10, pady=(0, 10))
+            
+        ctk.CTkButton(dashboard, text="Close", command=dashboard.destroy, font=PRO_FONT).pack(pady=10)
+
+    def export_report(self):
+        filepath = filedialog.asksaveasfilename(
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv"), ("Text files", "*.txt")],
+            title="Save QA Report"
+        )
+        if filepath:
+            try:
+                with open(filepath, 'w', newline='', encoding='utf-8') as f:
+                    writer = csv.writer(f)
+                    writer.writerow(["Question No", "Question", "Answer"])
+                    for idx, entry in enumerate(self.runner.qa_log, start=1):
+                        writer.writerow([idx, entry['question'], entry['answer']])
+                messagebox.showinfo("Success", f"Report saved successfully to:\n{filepath}")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to save report:\n{e}")

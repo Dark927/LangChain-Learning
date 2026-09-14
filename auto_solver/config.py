@@ -23,7 +23,17 @@ class AppConfig:
     # Defaulting to common Windows installation path
     tesseract_path: str = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
     
+    # Tesseract OCR language(s) — use '+' to combine, e.g. "ukr+rus+eng"
+    ocr_language: str = "ukr+rus+eng"
+    
     # Model to use in Antigravity CLI
     model: str = "Gemini 3.7 Flash (High)"
     
+    # Work mode: "Standard" or "Google Forms"
+    work_mode: str = "Standard"
+    
+    # Number of mouse wheel scroll clicks per scroll event in Google Forms mode
+    # Each click scrolls ~100-120px; increase for larger screens
+    scroll_amount: int = 5
+
 config = AppConfig()
