@@ -118,7 +118,7 @@ def ask_agent_google_forms_batch(
     trimmed = screen_text[:_SCREEN_TEXT_MAX_CHARS]
 
     answered_str = (
-        "\n".join(f"- {q}" for q in answered_questions)
+        "\n".join(f"- {q}" for q in dict.fromkeys(answered_questions))
         if answered_questions
         else "None"
     )
@@ -131,12 +131,14 @@ def ask_agent_google_forms_batch(
         "A: <correct answer verbatim>\n\n"
         "STRICT RULES:\n"
         "- Output ONLY Q:/A: line pairs. No numbers, no markdown, no explanation.\n"
+        "- If a question has multiple correct answers (e.g., checkboxes) and you are sure, output multiple A: lines for that Q.\n"
         "- If no unanswered questions are visible, output only: DONE\n\n"
-        "Example (2 questions):\n"
+        "Example (2 questions, one with multiple answers):\n"
         "Q: What is the capital of France?\n"
         "A: Paris\n"
-        "Q: Who wrote Hamlet?\n"
-        "A: William Shakespeare\n\n"
+        "Q: Which of these are fruits?\n"
+        "A: Apple\n"
+        "A: Banana\n\n"
         f"Already answered:\n{answered_str}\n\n"
         f"Screen text:\n{trimmed}"
     )
@@ -162,6 +164,7 @@ def _parse_batch_reply(reply: str) -> list[tuple[str, str]]:
     """
     Parses alternating Q:/A: lines into (question, answer) tuples.
     Tolerates extra whitespace and case variations.
+    Allows multiple A: lines for a single Q: to support checkboxes.
     """
     pairs: list[tuple[str, str]] = []
     current_q: str | None = None
@@ -178,7 +181,8 @@ def _parse_batch_reply(reply: str) -> list[tuple[str, str]]:
             current_q = q_match.group(1).strip()
         elif a_match and current_q is not None:
             pairs.append((current_q, a_match.group(1).strip()))
-            current_q = None
+            # We do NOT reset current_q = None here so that subsequent A: lines
+            # bind to the same question for multiple-choice checkbox support.
 
     return pairs
 
