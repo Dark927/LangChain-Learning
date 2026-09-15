@@ -149,7 +149,10 @@ def ask_agent_google_forms_batch(
         from fallback_client import ask_fallback
         reply = ask_fallback(prompt, config.fallback_model, live_log_callback)
 
-    if not reply or reply.strip().upper() == "DONE":
+    if not reply:
+        return None
+
+    if reply.strip().upper() == "DONE":
         return []
 
     return _parse_batch_reply(reply)

@@ -136,8 +136,12 @@ class Runner:
                 # 3. Ask Agent
                 self._set_status("Asking AI")
                 self._log("Asking Antigravity...", "green")
-                answer_text = ask_agent(text, lambda: self.stop_requested)
                 
+                def agent_live_log(msg):
+                    self._log(f"  [AI] {msg}", "gray")
+                    
+                answer_text = ask_agent(text, lambda: self.stop_requested, agent_live_log)
+
                 if self.stop_requested:
                     break
                     
@@ -293,6 +297,11 @@ class Runner:
 
                 if self.stop_requested:
                     break
+
+                if qa_pairs is None:
+                    self._log("No answer from agent. Retrying...", "yellow")
+                    if not self.safe_sleep(1): break
+                    continue
 
                 if not qa_pairs:
                     self._log("No new questions found on this screen. Form complete. Finishing execution.")
