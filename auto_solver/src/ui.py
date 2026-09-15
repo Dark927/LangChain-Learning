@@ -123,6 +123,7 @@ class AppUI:
         pref_menu.add_separator()
         pref_menu.add_command(label="Toggle Dark/Light Theme", command=self.toggle_theme)
         pref_menu.add_command(label="View Quota", command=self.check_quota)
+        pref_menu.add_command(label="Change Account", command=self.change_account)
         self.menubar.add_cascade(label="Preferences", menu=pref_menu)
         
         # --- Live Log Panel (Always visible below target frame/preferences) ---
@@ -342,7 +343,8 @@ class AppUI:
         self.model_combo.set(config.model)
         self.model_combo.pack(side="left", fill="x", expand=True, padx=(0, 10))
         
-        ctk.CTkButton(model_inner, text="View Quota", command=self.check_quota, width=80, font=PRO_FONT).pack(side="right")
+        ctk.CTkButton(model_inner, text="View Quota", command=self.check_quota, width=80, font=PRO_FONT).pack(side="left")
+        ctk.CTkButton(model_inner, text="Change Account", command=self.change_account, width=100, font=PRO_FONT, fg_color="#C0392B", hover_color="#922B21").pack(side="right", padx=(5, 0))
         
         # Engine Config
         ctk.CTkLabel(frame, text="Engine Configuration", font=SUBHEADER_FONT).pack(pady=(15, 5))
@@ -471,6 +473,16 @@ class AppUI:
         ctk.set_appearance_mode(new_mode)
         config.appearance_mode = new_mode
         config.save_to_file()
+
+    def change_account(self):
+        import subprocess, sys
+        response = messagebox.askyesno("Change Account", "Are you sure you want to change your Antigravity account?\n\nThis will open a terminal where you must type '/logout' and then securely log back in.", parent=self.root)
+        if response:
+            if sys.platform == "win32":
+                instruction = "echo === Antigravity Account Manager === & echo. & echo Type /logout and hit ENTER to clear your credentials. & echo Then, log in with your new account! & echo. & agy"
+                subprocess.run(["start", "cmd.exe", "/c", instruction], shell=True)
+            else:
+                messagebox.showinfo("Account Manager", "Please open your terminal, type 'agy', and then type '/logout' to change your account.", parent=self.root)
 
     def check_quota(self):
         import subprocess
