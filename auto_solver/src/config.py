@@ -53,6 +53,9 @@ class AppConfig:
     # "System", "Dark", "Light"
     appearance_mode: str = "System"
 
+    # Display name of the selected external fallback LLM model (empty = disabled)
+    fallback_model: str = ""
+
     def _get_data_dir(self):
         import os, sys
         base_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

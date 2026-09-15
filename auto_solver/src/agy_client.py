@@ -78,9 +78,10 @@ def _run_agy(prompt: str, check_abort=None, live_log_callback=None) -> str:
     return "".join(output_lines).strip()
 
 
-def ask_agent(question_text: str, check_abort=None) -> str:
+def ask_agent(question_text: str, check_abort=None, live_log_callback=None) -> str:
     """
     Sends a single multiple-choice question to the agent and returns the answer text only.
+    If Antigravity returns no answer, automatically falls back to configured external LLM.
     Used by Standard mode.
     """
     prompt = (
@@ -89,7 +90,15 @@ def ask_agent(question_text: str, check_abort=None) -> str:
         "NO explanation. NO extra words. Just the answer text.\n\n"
         f"{question_text}"
     )
-    return _run_agy(prompt, check_abort)
+    result = _run_agy(prompt, check_abort, live_log_callback)
+
+    if not result and config.fallback_model:
+        if live_log_callback:
+            live_log_callback("[Agent] No answer from Antigravity — trying fallback model...")
+        from fallback_client import ask_fallback
+        result = ask_fallback(prompt, config.fallback_model, live_log_callback)
+
+    return result
 
 
 def ask_agent_google_forms_batch(
@@ -133,6 +142,12 @@ def ask_agent_google_forms_batch(
     )
 
     reply = _run_agy(prompt, check_abort, live_log_callback)
+
+    if not reply and config.fallback_model:
+        if live_log_callback:
+            live_log_callback("[Agent] No answer from Antigravity — trying fallback model...")
+        from fallback_client import ask_fallback
+        reply = ask_fallback(prompt, config.fallback_model, live_log_callback)
 
     if not reply or reply.strip().upper() == "DONE":
         return []

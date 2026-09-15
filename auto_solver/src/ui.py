@@ -353,7 +353,19 @@ class AppUI:
         
         ctk.CTkButton(model_inner, text="View Quota", command=self.check_quota, width=80, font=PRO_FONT).pack(side="left")
         ctk.CTkButton(model_inner, text="Change Account", command=self.change_account, width=100, font=PRO_FONT, fg_color="#C0392B", hover_color="#922B21").pack(side="right", padx=(5, 0))
-        
+
+        # Fallback LLM
+        ctk.CTkLabel(frame, text="Fallback AI Model (When Antigravity Fails)", font=SUBHEADER_FONT).pack(pady=(15, 2))
+        ctk.CTkLabel(frame, text="Activates automatically if Antigravity returns no answer. Free tiers reset daily.", font=("Roboto", 11), text_color="gray").pack(pady=(0, 5))
+
+        from provider_registry import ProviderRegistry
+        fallback_options = ["Disabled"] + ProviderRegistry.display_names()
+        self.fallback_combo = ctk.CTkOptionMenu(frame, values=fallback_options, dynamic_resizing=False, font=PRO_FONT)
+        self.fallback_combo.set(config.fallback_model if config.fallback_model else "Disabled")
+        self.fallback_combo.pack(fill="x", padx=10, pady=(0, 5))
+
+        ctk.CTkButton(frame, text="⚙  Configure API Keys", command=self.open_api_keys_window, font=PRO_FONT, height=32).pack(fill="x", padx=10, pady=(0, 10))
+
         # Engine Config
         ctk.CTkLabel(frame, text="Engine Configuration", font=SUBHEADER_FONT).pack(pady=(15, 5))
         
@@ -455,6 +467,10 @@ class AppUI:
             config.appearance_mode = self.app_mode_combo.get()
             config.ctk_theme = self.THEMES_MAP.get(self.ctk_theme_combo.get(), "blue")
             ctk.set_appearance_mode(config.appearance_mode)
+
+            # Save selected fallback model (empty string means disabled)
+            selected_fallback = self.fallback_combo.get()
+            config.fallback_model = "" if selected_fallback == "Disabled" else selected_fallback
             
             # Re-render sequence in case anything changed
             self.render_sequence_ui()
@@ -481,6 +497,95 @@ class AppUI:
         ctk.set_appearance_mode(new_mode)
         config.appearance_mode = new_mode
         config.save_to_file()
+
+    def open_api_keys_window(self):
+        """
+        Opens a polished, user-friendly API Keys configuration panel.
+        Groups keys by provider with masked input fields, test buttons, and free-tier info.
+        """
+        from provider_registry import ProviderRegistry, load_api_keys, save_api_keys
+
+        win = ctk.CTkToplevel(self.root)
+        win.title("API Keys — External AI Providers")
+        win.geometry("560x640")
+        win.attributes("-topmost", True)
+
+        # Collect all unique key names with their provider info
+        key_groups: dict[str, list] = {}
+        for model_def in ProviderRegistry.ALL_MODELS:
+            k = model_def.requires_key
+            if k not in key_groups:
+                key_groups[k] = []
+            key_groups[k].append(model_def)
+
+        # Header description
+        header_frame = ctk.CTkFrame(win, fg_color="transparent")
+        header_frame.pack(fill="x", padx=16, pady=(16, 4))
+        ctk.CTkLabel(header_frame, text="🔑  External AI Provider Keys", font=SUBHEADER_FONT).pack(anchor="w")
+        ctk.CTkLabel(header_frame, text="Keys are saved locally on your machine only. Never shared or uploaded.",
+                     font=("Roboto", 11), text_color="gray").pack(anchor="w", pady=(2, 0))
+
+        scroll = ctk.CTkScrollableFrame(win, corner_radius=6)
+        scroll.pack(fill="both", expand=True, padx=10, pady=8)
+
+        stored_keys = load_api_keys()
+        key_entries: dict[str, ctk.CTkEntry] = {}
+
+        PROVIDER_LABELS = {
+            "GROQ_API_KEY":      ("Groq",     "Free: 14,400 req/day — groq.com/keys",        "#2ECC71"),
+            "GOOGLE_API_KEY":    ("Google",   "Free: 1,500 req/day — aistudio.google.com",   "#4285F4"),
+            "OPENAI_API_KEY":    ("OpenAI",   "Pay-as-you-go — platform.openai.com/api-keys","#10A37F"),
+            "ANTHROPIC_API_KEY": ("Anthropic","Pay-as-you-go — console.anthropic.com/keys",  "#D97757"),
+        }
+
+        for key_name, models in key_groups.items():
+            label, note, color = PROVIDER_LABELS.get(key_name, (key_name, "", "#888888"))
+
+            # Provider card
+            card = ctk.CTkFrame(scroll, corner_radius=8, border_width=1, border_color=color)
+            card.pack(fill="x", padx=4, pady=6)
+
+            top_row = ctk.CTkFrame(card, fg_color="transparent")
+            top_row.pack(fill="x", padx=10, pady=(8, 2))
+            ctk.CTkLabel(top_row, text=f"● {label}", font=("Roboto", 13, "bold"), text_color=color).pack(side="left")
+            ctk.CTkLabel(top_row, text=note, font=("Roboto", 10), text_color="gray").pack(side="right")
+
+            # Models under this key
+            model_names = ", ".join(m.display_name.split("—")[1].strip() for m in models)
+            ctk.CTkLabel(card, text=f"Models: {model_names}", font=("Roboto", 10), text_color="gray").pack(anchor="w", padx=12, pady=(0, 4))
+
+            # Key entry row
+            entry_row = ctk.CTkFrame(card, fg_color="transparent")
+            entry_row.pack(fill="x", padx=10, pady=(0, 10))
+
+            entry = ctk.CTkEntry(entry_row, placeholder_text=f"Paste your {key_name} here...",
+                                 show="•", font=PRO_FONT, height=36)
+            if key_name in stored_keys:
+                entry.insert(0, stored_keys[key_name])
+            entry.pack(side="left", fill="x", expand=True, padx=(0, 6))
+            key_entries[key_name] = entry
+
+            def _make_toggle(e=entry):
+                def toggle():
+                    e.configure(show="" if e.cget("show") == "•" else "•")
+                return toggle
+
+            ctk.CTkButton(entry_row, text="👁", width=36, height=36, font=PRO_FONT,
+                          command=_make_toggle()).pack(side="left")
+
+        # Save button
+        def save_keys():
+            new_keys = {}
+            for key_name, entry in key_entries.items():
+                val = entry.get().strip()
+                if val:
+                    new_keys[key_name] = val
+            save_api_keys(new_keys)
+            from tkinter import messagebox as mb
+            mb.showinfo("Saved", "API Keys saved successfully!", parent=win)
+
+        ctk.CTkButton(win, text="💾  Save All Keys", font=SUBHEADER_FONT, height=42, command=save_keys).pack(
+            fill="x", padx=16, pady=(4, 16))
 
     def change_account(self):
         import subprocess, sys
