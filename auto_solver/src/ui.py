@@ -703,10 +703,23 @@ class AppUI:
             entry.pack(side="left", fill="x", expand=True, padx=(0, 6))
             key_entries[key_name] = entry
 
+            def _make_paste(e=entry):
+                def do_paste():
+                    try:
+                        clip = e.clipboard_get()
+                        e.delete(0, "end")
+                        e.insert(0, clip)
+                    except Exception:
+                        pass
+                return do_paste
+
             def _make_toggle(e=entry):
                 def toggle():
-                    e.configure(show="" if e.cget("show") == "•" else "•")
+                    e.configure(show="" if e.cget("show") == "●" else "●")
                 return toggle
+
+            ctk.CTkButton(entry_row, text="📋", width=36, height=36, font=PRO_FONT,
+                          command=_make_paste()).pack(side="left", padx=(0, 6))
 
             ctk.CTkButton(entry_row, text="👁", width=36, height=36, font=PRO_FONT,
                           command=_make_toggle()).pack(side="left")
