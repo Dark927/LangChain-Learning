@@ -106,6 +106,21 @@ def ask_fallback(
             response = model_client.invoke([HumanMessage(content=trimmed_prompt)])
             text = response.content if hasattr(response, "content") else str(response)
             
+            if isinstance(text, list):
+                # Google Gemini sometimes returns a list of parts
+                parts = []
+                for part in text:
+                    if isinstance(part, dict) and "text" in part:
+                        parts.append(part["text"])
+                    elif isinstance(part, str):
+                        parts.append(part)
+                    else:
+                        parts.append(str(part))
+                text = " ".join(parts)
+                
+            if not isinstance(text, str):
+                text = str(text)
+
             if live_log_callback:
                 live_log_callback(f"[Fallback] Success!")
             return text.strip()
