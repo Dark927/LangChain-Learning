@@ -74,10 +74,9 @@ class AppUI:
         mode_frame = ctk.CTkFrame(self.root, fg_color="transparent")
         mode_frame.pack(fill="x", padx=20, pady=5)
         ctk.CTkLabel(mode_frame, text="Work Mode:", font=SUBHEADER_FONT).pack(side="left")
-        self.mode_combo = ctk.CTkOptionMenu(mode_frame, values=["Standard", "Google Forms"], 
-                                            command=self.on_mode_changed, font=PRO_FONT)
-        self.mode_combo.set(config.work_mode)
+        self.mode_combo = ctk.CTkOptionMenu(mode_frame, command=self.on_mode_changed, font=PRO_FONT)
         self.mode_combo.pack(side="right", fill="x", expand=True, padx=(10, 0))
+        self.refresh_mode_combo(current_selection=config.work_mode)
         
         # --- Targeting Section (Always Visible) ---
         target_frame = ctk.CTkFrame(self.root, corner_radius=6)
@@ -599,18 +598,41 @@ class AppUI:
         # Also re-render sequence UI to apply new colors
         self.render_sequence_ui()
 
-    def on_mode_changed(self, new_mode):
-        config.work_mode = new_mode
+    def refresh_mode_combo(self, current_selection=None):
+        import preset_manager
+        presets = preset_manager.load_presets()
+        values = ["Standard", "Google Forms"] + [p["preset_name"] for p in presets]
+        self.mode_combo.configure(values=values)
+        if current_selection and current_selection in values:
+            self.mode_combo.set(current_selection)
+
+    def on_mode_changed(self, new_val):
+        if new_val in ["Standard", "Google Forms"]:
+            config.work_mode = new_val
+        else:
+            import preset_manager
+            presets = preset_manager.load_presets()
+            preset = next((p for p in presets if p["preset_name"] == new_val), None)
+            if preset:
+                for k, v in preset.items():
+                    if hasattr(config, k):
+                        if k == 'question_region' and isinstance(v, list):
+                            v = tuple(v)
+                        elif k == 'click_sequence' and isinstance(v, list):
+                            for act in v:
+                                if 'pos' in act and isinstance(act['pos'], list):
+                                    act['pos'] = tuple(act['pos'])
+                                if 'color' in act and isinstance(act['color'], list):
+                                    act['color'] = tuple(act['color'])
+                        setattr(config, k, v)
+                        
         self._apply_theme_colors()
         
-        if new_mode == "Google Forms":
-            # Completely hide the sequence container
+        if config.work_mode == "Google Forms":
             self.sequence_container.pack_forget()
         else:
-            # Show the sequence container again
             self.sequence_container.pack(fill="x", pady=2)
                 
-        # Snap the window dynamically to prevent empty spaces when hiding/showing elements
         self.snap_window_size()
 
     def start_automation(self):
@@ -716,8 +738,21 @@ class AppUI:
             config.theme_color_hover = hover
             self._apply_theme_colors()
             
-            preset_manager.add_preset(preset_data)
-            messagebox.showinfo("Success", f"Preset '{name}' saved successfully!", parent=win)
+            presets = preset_manager.load_presets()
+            existing = next((p for p in presets if p.get("preset_name") == name), None)
+            
+            if existing:
+                if not messagebox.askyesno("Update Preset", f"A preset named '{name}' already exists.\nDo you want to overwrite it?", parent=win):
+                    return
+                preset_data["id"] = existing["id"]
+                preset_manager.update_preset(existing["id"], preset_data)
+                msg = f"Preset '{name}' updated successfully!"
+            else:
+                preset_manager.add_preset(preset_data)
+                msg = f"Preset '{name}' saved successfully!"
+                
+            self.refresh_mode_combo(current_selection=name)
+            messagebox.showinfo("Success", msg, parent=win)
             win.destroy()
             
         ctk.CTkButton(win, text="Save Preset", command=save, font=PRO_FONT).pack(pady=20)
@@ -793,6 +828,7 @@ class AppUI:
         def delete_preset(pid):
             if messagebox.askyesno("Confirm Delete", "Are you sure you want to delete this preset?", parent=win):
                 preset_manager.delete_preset(pid)
+                self.refresh_mode_combo(current_selection=config.work_mode)
                 refresh()
                 
         def export_preset(data):
@@ -810,6 +846,7 @@ class AppUI:
                 try:
                     data = preset_manager.import_preset(path)
                     preset_manager.add_preset(data)
+                    self.refresh_mode_combo(current_selection=config.work_mode)
                     refresh()
                     messagebox.showinfo("Imported", "Preset imported successfully!", parent=win)
                 except Exception as e:
