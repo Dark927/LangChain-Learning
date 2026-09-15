@@ -278,10 +278,14 @@ class AppUI:
         """Save settings and completely shut down the application."""
         from config import config
         config.save_to_file()
-        if hasattr(self, 'runner') and self.runner and self.runner.running:
+        self.is_animating = False
+        if hasattr(self, 'runner') and self.runner and getattr(self.runner, 'is_running', False):
             self.stop_automation()
-        self.root.quit()
-        self.root.destroy()
+        
+        try:
+            self.root.destroy()
+        except Exception:
+            pass
 
     def on_log_zoom(self, event):
         if event.delta > 0:
@@ -590,8 +594,11 @@ class AppUI:
             if config.ctk_theme != current_ctk_theme:
                 # Tell main loop to gently restart the UI window to apply the new JSON theme instantly
                 self.wants_restart = True
-                self.root.quit()
-                self.root.destroy()
+                self.is_animating = False
+                try:
+                    self.root.destroy()
+                except Exception:
+                    pass
 
         bottom_frame = ctk.CTkFrame(self.settings_win, fg_color="transparent")
         bottom_frame.pack(pady=10)
@@ -604,8 +611,11 @@ class AppUI:
                 self.settings_win.destroy()
                 # Restart UI completely to apply all defaults
                 self.wants_restart = True
-                self.root.quit()
-                self.root.destroy()
+                self.is_animating = False
+                try:
+                    self.root.destroy()
+                except Exception:
+                    pass
 
         ctk.CTkButton(bottom_frame, text="Reset to Defaults", font=PRO_FONT, height=40, fg_color="#C0392B", hover_color="#922B21", command=reset_defaults).pack(side="left", padx=10)
         ctk.CTkButton(bottom_frame, text="Save & Close", font=SUBHEADER_FONT, height=40, command=save_and_close).pack(side="left", padx=10)
