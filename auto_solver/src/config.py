@@ -71,6 +71,11 @@ class AppConfig:
         except Exception as e:
             print(f"Failed to save settings: {e}")
 
+    def reset_to_defaults(self):
+        import dataclasses
+        for field in dataclasses.fields(self):
+            setattr(self, field.name, field.default)
+
     def load_from_file(self):
         import json, os
         path = os.path.join(self._get_data_dir(), "app_settings.json")

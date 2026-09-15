@@ -271,6 +271,17 @@ class AppUI:
         # Lock minimum size to prevent clipping bottom elements (UI + ~100px log box)
         self.root.update_idletasks()
         self.root.wm_minsize(self.root.winfo_reqwidth(), self.root.winfo_reqheight())
+        
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+
+    def on_close(self):
+        """Save settings and completely shut down the application."""
+        from config import config
+        config.save_to_file()
+        if hasattr(self, 'runner') and self.runner and self.runner.running:
+            self.stop_automation()
+        self.root.quit()
+        self.root.destroy()
 
     def on_log_zoom(self, event):
         if event.delta > 0:
@@ -582,7 +593,22 @@ class AppUI:
                 self.root.quit()
                 self.root.destroy()
 
-        ctk.CTkButton(self.settings_win, text="Save & Close", font=SUBHEADER_FONT, height=40, command=save_and_close).pack(pady=10)
+        bottom_frame = ctk.CTkFrame(self.settings_win, fg_color="transparent")
+        bottom_frame.pack(pady=10)
+
+        def reset_defaults():
+            import tkinter.messagebox as messagebox
+            if messagebox.askyesno("Confirm Reset", "Reset all settings to defaults?\n\n(Your API Keys will NOT be affected.)", parent=self.settings_win):
+                config.reset_to_defaults()
+                config.save_to_file()
+                self.settings_win.destroy()
+                # Restart UI completely to apply all defaults
+                self.wants_restart = True
+                self.root.quit()
+                self.root.destroy()
+
+        ctk.CTkButton(bottom_frame, text="Reset to Defaults", font=PRO_FONT, height=40, fg_color="#C0392B", hover_color="#922B21", command=reset_defaults).pack(side="left", padx=10)
+        ctk.CTkButton(bottom_frame, text="Save & Close", font=SUBHEADER_FONT, height=40, command=save_and_close).pack(side="left", padx=10)
 
     def _on_quick_main_changed(self, selected: str) -> None:
         """Persist main agent selection and sync with settings."""
