@@ -1,0 +1,18 @@
+==================================================
+        AUTO SOLVER PRO - SETUP REPACK
+==================================================
+
+Welcome to the Auto Solver Pro!
+
+This installation wizard will extract and configure the standalone solver along with all required UI themes and dependencies on your system.
+
+[ IMPORTANT SETUP NOTES ]
+Upon your first launch, the program will automatically verify your Antigravity CLI authorization. If you are not authorized, it will safely spawn a secure command terminal for you to log in before opening the main interface.
+
+[ FEATURES INCLUDED ]
+- Fully Standalone UI Environment
+- Dynamic VSCode-Style Themes
+- Background CLI Automation Management
+
+Enjoy the software!
+==================================================

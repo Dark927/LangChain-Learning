@@ -3,7 +3,12 @@ import os
 import uuid
 import datetime
 
-HISTORY_FILE = "logs_history.json"
+import sys
+
+base_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR = os.path.join(base_dir, "data")
+os.makedirs(DATA_DIR, exist_ok=True)
+HISTORY_FILE = os.path.join(DATA_DIR, "logs_history.json")
 
 def load_history() -> list[dict]:
     if not os.path.exists(HISTORY_FILE):

@@ -1,2 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
 
-app_settings.json
+# Build and Dist
+build/
+dist/
+Output/
+*.spec
+
+# User Data and Logs
+data/app_settings.json
+data/logs_history.json
+data/qa_trace.log
+*.log
+
+# Misc
+.env

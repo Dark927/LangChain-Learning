@@ -53,19 +53,27 @@ class AppConfig:
     # "System", "Dark", "Light"
     appearance_mode: str = "System"
 
+    def _get_data_dir(self):
+        import os, sys
+        base_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        return os.path.join(base_dir, "data")
+
     def save_to_file(self):
-        import json, dataclasses
+        import json, dataclasses, os
+        data_dir = self._get_data_dir()
+        os.makedirs(data_dir, exist_ok=True)
         try:
-            with open("app_settings.json", "w", encoding="utf-8") as f:
+            with open(os.path.join(data_dir, "app_settings.json"), "w", encoding="utf-8") as f:
                 json.dump(dataclasses.asdict(self), f, indent=4)
         except Exception as e:
             print(f"Failed to save settings: {e}")
 
     def load_from_file(self):
         import json, os
-        if os.path.exists("app_settings.json"):
+        path = os.path.join(self._get_data_dir(), "app_settings.json")
+        if os.path.exists(path):
             try:
-                with open("app_settings.json", "r", encoding="utf-8") as f:
+                with open(path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 for k, v in data.items():
                     if hasattr(self, k):

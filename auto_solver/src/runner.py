@@ -13,7 +13,10 @@ import os
 _SCROLL_NOTCH_MULTIPLIER = 120
 
 # Set up Q&A trace logger
-log_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "qa_trace.log")
+import sys
+base_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+log_file = os.path.join(base_dir, "data", "qa_trace.log")
+os.makedirs(os.path.dirname(log_file), exist_ok=True)
 qa_logger = logging.getLogger("QATrace")
 qa_logger.setLevel(logging.INFO)
 if not qa_logger.handlers:

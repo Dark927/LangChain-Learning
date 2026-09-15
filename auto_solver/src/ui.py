@@ -396,14 +396,17 @@ class AppUI:
         
         ctk.CTkLabel(app_frame, text="Base Theme:", font=PRO_FONT).pack(side="left", padx=(5, 5))
         
+        import sys, os
+        base_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        
         self.THEMES_MAP = {
             "Default Blue": "blue",
             "Default Green": "green",
             "Default Dark Blue": "dark-blue",
-            "Dracula": "themes/dracula.json",
-            "Monokai": "themes/monokai.json",
-            "One Dark": "themes/onedark.json",
-            "Synthwave": "themes/synthwave.json"
+            "Dracula": os.path.join(base_dir, "themes", "dracula.json"),
+            "Monokai": os.path.join(base_dir, "themes", "monokai.json"),
+            "One Dark": os.path.join(base_dir, "themes", "onedark.json"),
+            "Synthwave": os.path.join(base_dir, "themes", "synthwave.json")
         }
         
         self.ctk_theme_combo = ctk.CTkOptionMenu(app_frame, values=list(self.THEMES_MAP.keys()), font=PRO_FONT, width=120)

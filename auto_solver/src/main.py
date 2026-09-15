@@ -12,6 +12,12 @@ def setup_environment():
 def main():
     setup_environment()
     print("Initializing Auto Solver...")
+    
+    # 1. Check and perform Antigravity CLI Auth / Install
+    from auth_manager import AuthManager
+    AuthManager.check_and_setup()
+    
+    # 2. Run Main UI Loop
     while True:
         app = AppUI()
         app.run()

@@ -3,7 +3,11 @@ import os
 import uuid
 from typing import List, Dict, Any
 
-PRESETS_FILE = "presets.json"
+import sys
+base_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR = os.path.join(base_dir, "data")
+os.makedirs(DATA_DIR, exist_ok=True)
+PRESETS_FILE = os.path.join(DATA_DIR, "presets.json")
 
 def load_presets() -> List[Dict[str, Any]]:
     if not os.path.exists(PRESETS_FILE):
