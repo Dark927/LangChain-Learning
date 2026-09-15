@@ -103,7 +103,18 @@ def ask_fallback(
                 clean_name = model_def.display_name.split("—")[-1].replace("(Free)", "").strip()
                 live_log_callback(f"[Fallback] {prefix}: {clean_name}...")
                 
-            response = model_client.invoke([HumanMessage(content=trimmed_prompt)])
+            import concurrent.futures
+            
+            def _invoke():
+                return model_client.invoke([HumanMessage(content=trimmed_prompt)])
+                
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(_invoke)
+                try:
+                    response = future.result(timeout=20)
+                except concurrent.futures.TimeoutError:
+                    raise TimeoutError(f"Model {model_def.provider_id} timed out after 20 seconds")
+                    
             text = response.content if hasattr(response, "content") else str(response)
             
             if isinstance(text, list):
