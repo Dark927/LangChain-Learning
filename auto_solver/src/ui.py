@@ -485,15 +485,50 @@ class AppUI:
                 messagebox.showinfo("Account Manager", "Please open your terminal, type 'agy', and then type '/logout' to change your account.", parent=self.root)
 
     def check_quota(self):
-        import subprocess
-        try:
-            result = subprocess.run(["agy", "--print", "/quota"], capture_output=True, text=True, encoding="utf-8")
-            if result.returncode == 0:
-                self.show_quota_dashboard(result.stdout.strip())
-            else:
-                messagebox.showerror("Error", f"Failed to get quota:\n{result.stderr}")
-        except Exception as e:
-            messagebox.showerror("Error", f"Could not check quota: {e}")
+        import subprocess, threading, sys
+        
+        def run_check():
+            try:
+                creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+                process = subprocess.Popen(["agy", "--print", "/quota"], 
+                                           stdout=subprocess.PIPE, 
+                                           stderr=subprocess.STDOUT, 
+                                           stdin=subprocess.PIPE,
+                                           text=True, encoding="utf-8", 
+                                           creationflags=creationflags)
+                
+                output_lines = []
+                while True:
+                    line = process.stdout.readline()
+                    if not line and process.poll() is not None:
+                        break
+                    if line:
+                        output_lines.append(line)
+                        line_lower = line.lower()
+                        # Detect if agy is blocked asking for the auth code
+                        if "paste this code" in line_lower or "authorization code" in line_lower or "enter" in line_lower and "code" in line_lower:
+                            def ask_code():
+                                dialog = ctk.CTkInputDialog(text="Authentication Required.\nYour browser has opened to log you in.\n\nPlease copy the code from your browser and paste it here:", title="Antigravity Auth")
+                                code = dialog.get_input()
+                                if code:
+                                    try:
+                                        process.stdin.write(code.strip() + "\n")
+                                        process.stdin.flush()
+                                    except:
+                                        pass
+                                else:
+                                    process.kill()
+                            self.root.after(0, ask_code)
+                
+                result = "".join(output_lines).strip()
+                if process.returncode == 0:
+                    self.root.after(0, self.show_quota_dashboard, result)
+                else:
+                    self.root.after(0, lambda: messagebox.showerror("Error", f"Failed to get quota:\n{result}", parent=self.root))
+            except Exception as e:
+                self.root.after(0, lambda: messagebox.showerror("Error", f"Could not check quota: {e}", parent=self.root))
+                
+        threading.Thread(target=run_check, daemon=True).start()
             
     def show_quota_dashboard(self, quota_text):
         dashboard = ctk.CTkToplevel(self.root)
