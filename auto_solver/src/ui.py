@@ -479,7 +479,7 @@ class AppUI:
         response = messagebox.askyesno("Change Account", "Are you sure you want to change your Antigravity account?\n\nThis will open a terminal where you must type '/logout' and then securely log back in.", parent=self.root)
         if response:
             if sys.platform == "win32":
-                instruction = "echo === Antigravity Account Manager === & echo. & echo Type /logout and hit ENTER to clear your credentials. & echo Then, log in with your new account! & echo. & agy"
+                instruction = "echo === Antigravity Account Manager === & echo. & echo 1. Type /logout and hit ENTER to clear your credentials. & echo 2. Log in with your new account! & echo 3. When the browser gives you a code, PASTE IT DIRECTLY INTO THIS WINDOW and press ENTER! & echo. & agy"
                 subprocess.run(["start", "cmd.exe", "/c", instruction], shell=True)
             else:
                 messagebox.showinfo("Account Manager", "Please open your terminal, type 'agy', and then type '/logout' to change your account.", parent=self.root)

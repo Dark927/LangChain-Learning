@@ -105,4 +105,5 @@ class AuthManager:
         if sys.platform == "win32":
             # Opens a new interactive console running agy so the user can log in
             # We pause afterwards so they can read any success/error messages before it closes
-            subprocess.run(["start", "cmd.exe", "/c", "agy & echo. & echo Press any key to return to Solver... & pause"], shell=True)
+            instruction = "echo === Antigravity Setup === & echo. & echo IMPORTANT: When your browser gives you an authentication code, & echo please PASTE IT DIRECTLY INTO THIS BLACK TERMINAL WINDOW and press ENTER! & echo. & agy & echo. & echo Press any key to return to Solver... & pause"
+            subprocess.run(["start", "cmd.exe", "/c", instruction], shell=True)
