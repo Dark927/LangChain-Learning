@@ -88,11 +88,8 @@ class AppUI:
         self.region_btn = ctk.CTkButton(target_frame, text="Select Question Region", command=self.select_region, font=PRO_FONT, corner_radius=4)
         self.region_btn.pack(pady=(0, 10))
         
-        self.submit_lbl = ctk.CTkLabel(target_frame, text="Submit Button: Not Set", font=PRO_FONT)
-        self.submit_lbl.pack(pady=2)
-        self.submit_btn = ctk.CTkButton(target_frame, text="Select Submit Button", command=self.select_submit, font=PRO_FONT, corner_radius=4)
-        self.submit_btn.pack(pady=(0, 10))
-        
+        self.sequence_container = ctk.CTkFrame(target_frame, fg_color="transparent")
+        self.sequence_container.pack(fill="x", pady=2)        
         # --- Native Top Menu Bar ---
         self.menubar = tk.Menu(self.root)
         self.root.config(menu=self.menubar)
@@ -373,11 +370,7 @@ class AppUI:
         
         self.save_logs_var = ctk.BooleanVar(value=config.save_qa_logs)
         self.save_logs_cb = ctk.CTkCheckBox(frame, text="Enable AI Cleanup & Save Final QA Logs", variable=self.save_logs_var, font=PRO_FONT)
-        self.save_logs_cb.pack(fill="x", pady=(5, 5), padx=10)
-        
-        self.check_color_var = ctk.BooleanVar(value=config.check_submit_color)
-        self.check_color_cb = ctk.CTkCheckBox(frame, text="Require Submit Button Color Match (Standard Mode)", variable=self.check_color_var, font=PRO_FONT)
-        self.check_color_cb.pack(fill="x", pady=(5, 15), padx=10)
+        self.save_logs_cb.pack(fill="x", pady=(5, 15), padx=10)
         
         def save_and_close():
             try:
@@ -401,14 +394,9 @@ class AppUI:
             config.model = self.model_combo.get().strip()
             config.show_step_timings = self.timings_var.get()
             config.save_qa_logs = self.save_logs_var.get()
-            config.check_submit_color = self.check_color_var.get()
             
-            # Update the main UI label instantly if submit_button_pos exists
-            if config.submit_button_pos:
-                if config.check_submit_color:
-                    self.submit_lbl.configure(text=f"Submit: {config.submit_button_pos} | RGB: {config.submit_button_color}")
-                else:
-                    self.submit_lbl.configure(text=f"Submit: {config.submit_button_pos} (No Color Check)")
+            # Re-render sequence in case anything changed
+            self.render_sequence_ui()
             
             self.settings_win.destroy()
 
@@ -491,20 +479,96 @@ class AppUI:
         config.question_region = region
         self.region_lbl.configure(text=f"Question Region: {region}")
         
-    def select_submit(self):
-        messagebox.showinfo("Select Submit", "Move your mouse to the center of the Submit button and press ENTER. We will record the position.")
+    def snap_window_size(self):
+        self.root.update_idletasks()
+        req_h = self.root.winfo_reqheight()
+        self.root.wm_minsize(self.root.winfo_reqwidth(), req_h)
+        if not getattr(self, 'logs_visible', True):
+            w = self.root.winfo_width()
+            x = self.root.winfo_x()
+            y = self.root.winfo_y()
+            self.root.wm_geometry(f"{w}x{req_h}+{x}+{y}")
+
+    def render_sequence_ui(self):
+        for w in self.sequence_container.winfo_children():
+            w.destroy()
+            
+        fg, hover = self._get_theme_colors()
+            
+        for i, action in enumerate(config.click_sequence):
+            row = ctk.CTkFrame(self.sequence_container, corner_radius=6, border_width=1, border_color=("gray80", "gray20"))
+            row.pack(fill="x", padx=10, pady=4)
+            
+            top_bar = ctk.CTkFrame(row, fg_color="transparent")
+            top_bar.pack(fill="x", padx=10, pady=(5, 0))
+            
+            lbl = ctk.CTkLabel(top_bar, text=action.get('name', f"Action {i+1}"), font=SUBHEADER_FONT)
+            lbl.pack(side="left")
+            
+            def rename_action(idx=i, old_name=action.get('name', f"Action {i+1}")):
+                import tkinter.simpledialog
+                new_name = tkinter.simpledialog.askstring("Rename Action", "Enter new name for this action:", initialvalue=old_name, parent=self.root)
+                if new_name and new_name.strip() != old_name:
+                    config.click_sequence[idx]['name'] = new_name.strip()
+                    self.render_sequence_ui()
+                    
+            edit_btn = ctk.CTkButton(top_bar, text="✎", width=24, height=24, font=("Segoe UI", 12), fg_color="transparent", text_color=("gray20", "gray80"), hover_color=("gray85", "gray25"), command=rename_action)
+            edit_btn.pack(side="left", padx=(5, 0))
+            
+            if len(config.click_sequence) > 1:
+                del_btn = ctk.CTkButton(top_bar, text="✖", width=24, height=24, font=PRO_FONT, fg_color="#ef4444", hover_color="#b91c1c", command=lambda idx=i: self.delete_action(idx))
+                del_btn.pack(side="right")
+                
+            status_text = f"Pos: {action.get('pos')}" if action.get('pos') else "Not Set"
+            if action.get('pos') and action.get('check_color', True) and action.get('color'):
+                status_text += f" | RGB: {action.get('color')}"
+            elif action.get('pos'):
+                status_text += " (No Color Check)"
+                
+            ctk.CTkLabel(row, text=status_text, font=("Segoe UI", 12), text_color=("gray20", "gray80")).pack(pady=(2, 5))
+            
+            controls = ctk.CTkFrame(row, fg_color="transparent")
+            controls.pack(fill="x", padx=10, pady=(0, 10))
+            
+            btn = ctk.CTkButton(controls, text="Select Position", font=PRO_FONT, height=28, fg_color=fg, hover_color=hover, command=lambda idx=i: self.select_action_pos(idx))
+            btn.pack(side="left", fill="x", expand=True, padx=(0, 5))
+            
+            chk_var = ctk.BooleanVar(value=action.get('check_color', True))
+            def on_check(var_value, idx=i):
+                config.click_sequence[idx]['check_color'] = var_value
+                self.render_sequence_ui()
+                
+            chk = ctk.CTkCheckBox(controls, text="Wait for Color", font=("Segoe UI", 11), variable=chk_var, command=lambda v=chk_var, idx=i: on_check(v.get(), idx))
+            chk.pack(side="right")
+            
+        add_btn = ctk.CTkButton(self.sequence_container, text="➕ Add Click Action", width=140, height=28, font=PRO_FONT, fg_color="transparent", border_width=1, text_color=("gray10", "gray90"), hover_color=("gray85", "gray25"), command=self.add_action)
+        add_btn.pack(pady=(5, 10))
+        
+        self.snap_window_size()
+
+    def add_action(self):
+        new_idx = len(config.click_sequence) + 1
+        config.click_sequence.append({"name": f"Action {new_idx}", "pos": None, "color": None, "check_color": True})
+        self.render_sequence_ui()
+        
+    def delete_action(self, idx):
+        if 0 <= idx < len(config.click_sequence):
+            config.click_sequence.pop(idx)
+            self.render_sequence_ui()
+
+    def select_action_pos(self, idx):
+        if idx >= len(config.click_sequence): return
+        
+        messagebox.showinfo("Select Position", f"Move your mouse to the {config.click_sequence[idx]['name']} button and press ENTER. We will record the position.")
         
         def wait_for_enter(event):
             pos = pyautogui.position()
-            config.submit_button_pos = (pos.x, pos.y)
             color = pyautogui.pixel(pos.x, pos.y)
-            config.submit_button_color = color
-            if config.check_submit_color:
-                self.submit_lbl.configure(text=f"Submit: {pos} | RGB: {color}")
-            else:
-                self.submit_lbl.configure(text=f"Submit: {pos} (No Color Check)")
+            config.click_sequence[idx]['pos'] = (pos.x, pos.y)
+            config.click_sequence[idx]['color'] = color
             overlay.destroy()
             self.root.deiconify()
+            self.render_sequence_ui()
             
         self.root.withdraw()
         overlay = tk.Toplevel()
@@ -524,51 +588,38 @@ class AppUI:
         fg, hover = self._get_theme_colors()
         self.mode_combo.configure(fg_color=fg, button_color=fg, button_hover_color=hover)
         self.region_btn.configure(fg_color=fg, hover_color=hover)
-        self.submit_btn.configure(fg_color=fg, hover_color=hover)
         
         # Only update start_btn if it's not currently red (running)
         if not self.runner.is_running:
             self.start_btn.configure(fg_color=fg, hover_color=hover)
+            
+        # Also re-render sequence UI to apply new colors
+        self.render_sequence_ui()
 
     def on_mode_changed(self, new_mode):
         config.work_mode = new_mode
         self._apply_theme_colors()
         
         if new_mode == "Google Forms":
-            # Completely hide the submit button and label
-            self.submit_lbl.pack_forget()
-            self.submit_btn.pack_forget()
+            # Completely hide the sequence container
+            self.sequence_container.pack_forget()
         else:
-            # Show the submit button and label again
-            self.submit_lbl.pack(pady=2)
-            self.submit_btn.pack(pady=(0, 10))
-            
-            if config.submit_button_pos:
-                if config.check_submit_color:
-                    self.submit_lbl.configure(text=f"Submit: {config.submit_button_pos} | RGB: {config.submit_button_color}", text_color=("gray10", "gray90"))
-                else:
-                    self.submit_lbl.configure(text=f"Submit: {config.submit_button_pos} (No Color Check)", text_color=("gray10", "gray90"))
-            else:
-                self.submit_lbl.configure(text="Submit Button: Not Set", text_color=("gray10", "gray90"))
+            # Show the sequence container again
+            self.sequence_container.pack(fill="x", pady=2)
                 
         # Snap the window dynamically to prevent empty spaces when hiding/showing elements
-        self.root.update_idletasks()
-        req_h = self.root.winfo_reqheight()
-        self.root.wm_minsize(self.root.winfo_reqwidth(), req_h)
-        if not self.logs_visible:
-            w = self.root.winfo_width()
-            x = self.root.winfo_x()
-            y = self.root.winfo_y()
-            self.root.wm_geometry(f"{w}x{req_h}+{x}+{y}")
+        self.snap_window_size()
 
     def start_automation(self):
         if not config.question_region:
             messagebox.showerror("Error", "Please select the question region first.")
             return
             
-        if config.work_mode == "Standard" and not config.submit_button_pos:
-            messagebox.showerror("Error", "Please select the submit position for Standard mode.")
-            return
+        if config.work_mode == "Standard":
+            for i, act in enumerate(config.click_sequence):
+                if not act.get("pos"):
+                    messagebox.showerror("Error", f"Please select the position for '{act.get('name', f'Action {i+1}')}'.")
+                    return
         
         if self.runner.is_running:
             self.runner.is_running = False

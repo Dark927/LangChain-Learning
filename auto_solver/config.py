@@ -1,17 +1,17 @@
 import os
-from dataclasses import dataclass
-from typing import Optional, Tuple
+from dataclasses import dataclass, field
+from typing import Optional, Tuple, List, Dict, Any
 
 @dataclass
 class AppConfig:
     # Screen region for capturing questions: (left, top, width, height)
     question_region: Optional[Tuple[int, int, int, int]] = None
     
-    # Coordinates of the submit button: (x, y)
-    submit_button_pos: Optional[Tuple[int, int]] = None
-    
-    # The required RGB color of the submit button pixel
-    submit_button_color: Optional[Tuple[int, int, int]] = None
+    # Sequence of click actions for Standard mode
+    # e.g. [{"name": "Submit", "pos": (x,y), "color": (r,g,b), "check_color": True}]
+    click_sequence: List[Dict[str, Any]] = field(default_factory=lambda: [
+        {"name": "Action 1", "pos": None, "color": None, "check_color": True}
+    ])
     
     # Delay in seconds to simulate human thinking before submitting
     thinking_delay: float = 0.0
@@ -41,8 +41,5 @@ class AppConfig:
     
     # Enable AI formatting and saving of final QA logs
     save_qa_logs: bool = True
-    
-    # Whether to strictly wait for the submit button to match the captured pixel color
-    check_submit_color: bool = True
 
 config = AppConfig()

@@ -95,9 +95,10 @@ class Runner:
             self._log("Error: Question region is not set.", "red")
             return
             
-        if not config.submit_button_pos:
-            self._log("Error: Submit button position is not set.", "red")
-            return
+        for act in config.click_sequence:
+            if not act.get("pos"):
+                self._log(f"Error: Position for '{act.get('name')}' is not set.", "red")
+                return
             
         self.is_running = True
         self.stop_requested = False
@@ -169,36 +170,46 @@ class Runner:
                     self._log(f"Simulating human thinking... waiting {config.thinking_delay} seconds.")
                     if not self.safe_sleep(config.thinking_delay): break
                 
-                pos = config.submit_button_pos
-                
-                if config.check_submit_color:
-                    # 6. Wait for submit button to turn expected color
-                    self._set_status("Waiting for Submit")
-                    self._log("Waiting for submit button to be ready (matching color)...")
-                    target_color = config.submit_button_color
-                    found_color = False
-
-                    for _ in range(100):
-                        if self.stop_requested: break
-                        current_color = pyautogui.pixel(*pos)
-                        if self.color_match(current_color, target_color):
-                            found_color = True
-                            break
-                        time.sleep(0.1)
-
+                # 6. Execute Click Sequence
+                for idx, action in enumerate(config.click_sequence):
                     if self.stop_requested: break
+                    
+                    pos = action['pos']
+                    name = action.get('name', f'Action {idx+1}')
+                    
+                    if action.get('check_color', True) and action.get('color'):
+                        self._set_status(f"Waiting for {name}")
+                        self._log(f"Waiting for '{name}' button to match color...")
+                        target_color = action['color']
+                        found_color = False
 
-                    if not found_color:
-                        self._log("Submit button did not turn the expected color after 10 seconds. Stopping.", "red")
-                        self.is_running = False
-                        break
-                else:
-                    self._log("Bypassing color match (disabled in settings).")
+                        for _ in range(100):
+                            if self.stop_requested: break
+                            current_color = pyautogui.pixel(*pos)
+                            if self.color_match(current_color, target_color):
+                                found_color = True
+                                break
+                            time.sleep(0.1)
 
-                self._set_status("Clicking Submit")
-                self._log(f"Clicking submit button at {pos}...", "yellow")
-                pyautogui.moveTo(*pos, duration=0.2)
-                pyautogui.click()
+                        if self.stop_requested: break
+
+                        if not found_color:
+                            self._log(f"'{name}' button did not turn the expected color after 10 seconds. Stopping.", "red")
+                            self.is_running = False
+                            break
+                    else:
+                        self._log(f"Bypassing color match for '{name}'.")
+
+                    if not self.is_running: break
+
+                    self._set_status(f"Clicking {name}")
+                    self._log(f"Clicking '{name}' at {pos}...", "yellow")
+                    pyautogui.moveTo(*pos, duration=0.2)
+                    pyautogui.click()
+                    
+                    # Small delay between actions in sequence
+                    if idx < len(config.click_sequence) - 1:
+                        if not self.safe_sleep(0.5): break
                 
                 # 7. Wait for next question
                 self._set_status(f"Loop delay ({config.loop_delay}s)")
