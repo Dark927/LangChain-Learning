@@ -26,14 +26,25 @@ move AutoSolverPro.spec repack\ >nul 2>&1
 echo.
 echo [3/3] Building Repack Installer...
 :: Check if Inno Setup is installed in common directories
-set "INNO_PATH=C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
-if exist "%INNO_PATH%" (
+set "INNO_PATH="
+if exist "C:\Program Files (x86)\Inno Setup 7\ISCC.exe" set "INNO_PATH=C:\Program Files (x86)\Inno Setup 7\ISCC.exe"
+if exist "C:\Program Files\Inno Setup 7\ISCC.exe" set "INNO_PATH=C:\Program Files\Inno Setup 7\ISCC.exe"
+if exist "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" set "INNO_PATH=C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+if exist "C:\Program Files (x86)\Inno Setup 5\ISCC.exe" set "INNO_PATH=C:\Program Files (x86)\Inno Setup 5\ISCC.exe"
+if exist "C:\Program Files\Inno Setup 6\ISCC.exe" set "INNO_PATH=C:\Program Files\Inno Setup 6\ISCC.exe"
+if exist "C:\Program Files\Inno Setup 5\ISCC.exe" set "INNO_PATH=C:\Program Files\Inno Setup 5\ISCC.exe"
+if exist "%LOCALAPPDATA%\Programs\Inno Setup 7\ISCC.exe" set "INNO_PATH=%LOCALAPPDATA%\Programs\Inno Setup 7\ISCC.exe"
+if exist "%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" set "INNO_PATH=%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe"
+if exist "%LOCALAPPDATA%\Programs\Inno Setup 5\ISCC.exe" set "INNO_PATH=%LOCALAPPDATA%\Programs\Inno Setup 5\ISCC.exe"
+
+if defined INNO_PATH (
     echo Compiling Setup.exe with Inno Setup...
     "%INNO_PATH%" repack\installer.iss
     echo.
     echo ==============================================
     echo SUCCESS: You can find your final Repack Installer in the "Output" folder!
     echo ==============================================
+    explorer "Output"
 ) else (
     echo.
     echo ==============================================
@@ -47,6 +58,7 @@ if exist "%INNO_PATH%" (
     echo.
     echo Your professional repack installer will be outputted to the "Output" folder!
     echo ==============================================
+    explorer "dist\AutoSolverPro"
 )
 
 pause
