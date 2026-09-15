@@ -15,13 +15,16 @@ def _run_agy(prompt: str, check_abort=None, live_log_callback=None) -> str:
     Kills the process if stop is requested or the call exceeds _AGENT_TIMEOUT_SEC.
     Returns empty string on any failure.
     """
+    import sys
+    creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
     proc = subprocess.Popen(
-        ["agy", "--print", prompt, "--model", config.model, "--continue"],
+        ["agy", "--print", prompt, "--model", config.model],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
         encoding="utf-8",
         bufsize=1,
+        creationflags=creationflags
     )
     
     import queue

@@ -42,7 +42,8 @@ class AuthManager:
     @staticmethod
     def is_agy_installed():
         try:
-            subprocess.run(["agy", "--help"], capture_output=True, check=True)
+            creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+            subprocess.run(["agy", "--help"], capture_output=True, check=True, creationflags=creationflags)
             return True
         except (FileNotFoundError, subprocess.CalledProcessError):
             return False
@@ -91,7 +92,8 @@ class AuthManager:
         try:
             # We run /quota because it strictly hits the cloud API.
             # If the user is unauthenticated, it triggers the browser and blocks waiting for input.
-            res = subprocess.run(["agy", "--print", "/quota"], capture_output=True, text=True, timeout=8)
+            creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+            res = subprocess.run(["agy", "--print", "/quota"], capture_output=True, text=True, timeout=8, creationflags=creationflags)
             
             # If the command succeeds perfectly, they are authenticated.
             if res.returncode == 0:
