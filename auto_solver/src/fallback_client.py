@@ -18,7 +18,7 @@ from provider_registry import ProviderModel, ProviderRegistry, get_key
 _FALLBACK_MAX_CHARS: int = 3000
 
 
-def _build_model(model_def: ProviderModel) -> BaseChatModel | None:
+def _build_model(model_def: ProviderModel) -> tuple[ProviderModel, BaseChatModel] | None:
     """
     Construct a LangChain BaseChatModel for a given provider model definition.
     Injects the API key into environment before initialization.
@@ -27,7 +27,7 @@ def _build_model(model_def: ProviderModel) -> BaseChatModel | None:
         model_def: The ProviderModel descriptor from the registry.
 
     Returns:
-        A ready-to-invoke BaseChatModel, or None if the key is missing.
+        Tuple of (ProviderModel, BaseChatModel), or None if the key is missing.
     """
     key_value = get_key(model_def.requires_key)
     if not key_value:
@@ -37,54 +37,39 @@ def _build_model(model_def: ProviderModel) -> BaseChatModel | None:
     os.environ[model_def.requires_key] = key_value
 
     try:
-        return init_chat_model(
+        model = init_chat_model(
             model=model_def.model_id,
             model_provider=model_def.provider_id,
         )
+        return (model_def, model)
     except Exception as e:
         print(f"[Fallback] Failed to build model '{model_def.display_name}': {e}")
         return None
 
 
-def build_fallback_chain(selected_display_name: str | None) -> BaseChatModel | None:
+def get_configured_fallback_models(selected_display_name: str | None) -> list[tuple[ProviderModel, BaseChatModel]]:
     """
-    Build a resilient LangChain model chain.
-    The user-selected model is the primary. All remaining configured models are chained
-    as automatic fallbacks using LangChain's .with_fallbacks().
-
-    Args:
-        selected_display_name: The UI display name of the user's selected primary model.
-
-    Returns:
-        A resilient BaseChatModel chain, or None if no keys are configured at all.
+    Build a list of all configured fallback models.
+    The user-selected model is placed first. All remaining configured models follow.
     """
     primary_def = ProviderRegistry.get_by_display_name(selected_display_name or "")
-    all_models_with_keys: list[BaseChatModel] = []
+    models: list[tuple[ProviderModel, BaseChatModel]] = []
 
     # Build primary first if selected and has a key
-    primary_model: BaseChatModel | None = None
     if primary_def:
-        primary_model = _build_model(primary_def)
+        built = _build_model(primary_def)
+        if built:
+            models.append(built)
 
     # Build all other configured models as fallbacks
-    fallbacks: list[BaseChatModel] = []
     for model_def in ProviderRegistry.ALL_MODELS:
         if primary_def and model_def.display_name == primary_def.display_name:
             continue
         built = _build_model(model_def)
         if built:
-            fallbacks.append(built)
+            models.append(built)
 
-    if primary_model is None and not fallbacks:
-        return None
-
-    if primary_model is None:
-        primary_model = fallbacks.pop(0)
-
-    if fallbacks:
-        return primary_model.with_fallbacks(fallbacks)
-
-    return primary_model
+    return models
 
 
 def ask_fallback(
@@ -93,34 +78,37 @@ def ask_fallback(
     live_log_callback: Callable[[str], None] | None = None,
 ) -> str:
     """
-    Send a prompt to the configured fallback LLM chain and return the answer.
-    Gracefully returns an empty string on any failure.
-
-    Args:
-        prompt: The full question prompt to send.
-        selected_model_name: Display name of the user-selected primary fallback model.
-        live_log_callback: Optional callback to stream status messages to the UI log.
-
-    Returns:
-        The model's text response, or empty string on any failure.
+    Send a prompt to the fallback LLMs. Automatically switches to the next available model if one fails.
     """
-    chain = build_fallback_chain(selected_model_name)
-    if chain is None:
+    models = get_configured_fallback_models(selected_model_name)
+    if not models:
         if live_log_callback:
             live_log_callback("[Fallback] No API keys configured. Skipping fallback models.")
         return ""
 
     trimmed_prompt = prompt[:_FALLBACK_MAX_CHARS]
+    
+    for i, (model_def, model_client) in enumerate(models):
+        try:
+            if live_log_callback:
+                prefix = "Primary Fallback" if i == 0 else f"Auto-Switching to Fallback {i+1}"
+                # Extract clean name like "Llama 3.3 70B" from "Groq — Llama 3.3 70B (Free)"
+                clean_name = model_def.display_name.split("—")[-1].replace("(Free)", "").strip()
+                live_log_callback(f"[Fallback] {prefix}: {clean_name}...")
+                
+            response = model_client.invoke([HumanMessage(content=trimmed_prompt)])
+            text = response.content if hasattr(response, "content") else str(response)
+            
+            if live_log_callback:
+                live_log_callback(f"[Fallback] Success!")
+            return text.strip()
+            
+        except Exception as e:
+            if live_log_callback:
+                err_msg = str(e).split('\n')[0][:50]
+                live_log_callback(f"[Fallback] {model_def.provider_id} failed ({err_msg})...")
+            continue
 
-    try:
-        if live_log_callback:
-            live_log_callback(f"[Fallback] Querying external LLM...")
-        response = chain.invoke([HumanMessage(content=trimmed_prompt)])
-        text = response.content if hasattr(response, "content") else str(response)
-        if live_log_callback:
-            live_log_callback(f"[Fallback] Got response.")
-        return text.strip()
-    except Exception as e:
-        if live_log_callback:
-            live_log_callback(f"[Fallback] All models failed: {e}")
-        return ""
+    if live_log_callback:
+        live_log_callback(f"[Fallback] All configured models failed.")
+    return ""
