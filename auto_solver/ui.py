@@ -684,7 +684,12 @@ class AppUI:
         ctk.CTkLabel(win, text="Preset Name:", font=PRO_FONT).pack(pady=(10,0))
         name_entry = ctk.CTkEntry(win, width=250, font=PRO_FONT)
         name_entry.pack(pady=5)
-        name_entry.insert(0, f"My {config.work_mode} Preset")
+        
+        current_selection = self.mode_combo.get()
+        if current_selection not in ["Standard", "Google Forms"]:
+            name_entry.insert(0, current_selection)
+        else:
+            name_entry.insert(0, f"My {config.work_mode} Preset")
         
         ctk.CTkLabel(win, text="Accent Color:", font=PRO_FONT).pack(pady=(10,0))
         
@@ -799,11 +804,30 @@ class AppUI:
                 
                 ctk.CTkButton(btn_frame, text="Load", width=60, font=PRO_FONT, fg_color="#10b981", hover_color="#047857",
                               command=lambda data=p: load_preset(data)).pack(side="left", padx=2)
+                ctk.CTkButton(btn_frame, text="Rename", width=60, font=PRO_FONT, fg_color="#f59e0b", hover_color="#d97706",
+                              command=lambda data=p: rename_preset(data)).pack(side="left", padx=2)
                 ctk.CTkButton(btn_frame, text="Export", width=60, font=PRO_FONT,
                               command=lambda data=p: export_preset(data)).pack(side="left", padx=2)
                 ctk.CTkButton(btn_frame, text="Delete", width=60, font=PRO_FONT, fg_color="#ef4444", hover_color="#b91c1c",
                               command=lambda id=pid: delete_preset(id)).pack(side="left", padx=2)
                               
+        def rename_preset(data):
+            old_name = data.get("preset_name", "")
+            import tkinter.simpledialog
+            new_name = tkinter.simpledialog.askstring("Rename Preset", "Enter new name:", initialvalue=old_name, parent=win)
+            if new_name and new_name.strip() and new_name.strip() != old_name:
+                data["preset_name"] = new_name.strip()
+                preset_manager.update_preset(data["id"], data)
+                
+                # Check if it's currently active in the combo
+                current = self.mode_combo.get()
+                if current == old_name:
+                    self.refresh_mode_combo(current_selection=new_name.strip())
+                else:
+                    self.refresh_mode_combo(current_selection=current)
+                
+                refresh()
+
         def load_preset(data):
             for k, v in data.items():
                 if hasattr(config, k):
