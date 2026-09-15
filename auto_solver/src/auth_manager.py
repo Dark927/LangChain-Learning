@@ -89,14 +89,20 @@ class AuthManager:
     @staticmethod
     def is_authenticated():
         try:
-            # We run a command that actually hits the cloud API to ensure tokens are valid.
+            # We run /quota because it strictly hits the cloud API.
             # If the user is unauthenticated, it triggers the browser and blocks waiting for input.
-            res = subprocess.run(["agy", "--print", "/whoami"], capture_output=True, text=True, timeout=4)
+            res = subprocess.run(["agy", "--print", "/quota"], capture_output=True, text=True, timeout=8)
             
+            # If the command succeeds perfectly, they are authenticated.
+            if res.returncode == 0:
+                return True
+                
+            # If there's an error output indicating unauthorized, catch it.
             output = (res.stdout + res.stderr).lower()
             if "unauthorized" in output or "login" in output or "not logged in" in output:
                 return False
-            return True
+                
+            return False
         except subprocess.TimeoutExpired:
             # If it times out, it means agy paused to ask for the browser auth code!
             return False
