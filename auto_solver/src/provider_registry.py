@@ -30,12 +30,20 @@ class ProviderRegistry:
     """
 
     ALL_MODELS: ClassVar[list[ProviderModel]] = [
+        # ── Groq (free tier, resets daily) ──────────────────────────────────
         ProviderModel(
             provider_id="groq",
             display_name="Groq — Llama 3.3 70B (Free)",
             model_id="llama-3.3-70b-versatile",
             requires_key="GROQ_API_KEY",
             free_tier_note="Free tier: ~14,400 req/day, resets daily",
+        ),
+        ProviderModel(
+            provider_id="groq",
+            display_name="Groq — Llama 3.1 8B (Free)",
+            model_id="llama-3.1-8b-instant",
+            requires_key="GROQ_API_KEY",
+            free_tier_note="Free tier: fastest Groq model, resets daily",
         ),
         ProviderModel(
             provider_id="groq",
@@ -52,6 +60,14 @@ class ProviderRegistry:
             free_tier_note="Free tier: ~14,400 req/day, resets daily",
         ),
         ProviderModel(
+            provider_id="groq",
+            display_name="Groq — DeepSeek R1 Distill 70B (Free)",
+            model_id="deepseek-r1-distill-llama-70b",
+            requires_key="GROQ_API_KEY",
+            free_tier_note="Free tier: reasoning model, resets daily",
+        ),
+        # ── Google AI Studio (free tier, resets daily) ───────────────────────
+        ProviderModel(
             provider_id="google_genai",
             display_name="Google — Gemini 2.0 Flash (Free)",
             model_id="gemini-2.0-flash",
@@ -66,12 +82,28 @@ class ProviderRegistry:
             free_tier_note="Free tier: 500 req/day, resets daily",
         ),
         ProviderModel(
+            provider_id="google_genai",
+            display_name="Google — Gemini 2.0 Flash Lite (Free)",
+            model_id="gemini-2.0-flash-lite",
+            requires_key="GOOGLE_API_KEY",
+            free_tier_note="Free tier: 1,500 req/day, fastest Google model",
+        ),
+        # ── OpenAI (pay-as-you-go, very cheap) ──────────────────────────────
+        ProviderModel(
             provider_id="openai",
             display_name="OpenAI — GPT-4o Mini",
             model_id="gpt-4o-mini",
             requires_key="OPENAI_API_KEY",
             free_tier_note="Pay-as-you-go (very cheap)",
         ),
+        ProviderModel(
+            provider_id="openai",
+            display_name="OpenAI — GPT-4.1 Nano",
+            model_id="gpt-4.1-nano",
+            requires_key="OPENAI_API_KEY",
+            free_tier_note="Pay-as-you-go (cheapest OpenAI model)",
+        ),
+        # ── Anthropic (pay-as-you-go, very cheap) ────────────────────────────
         ProviderModel(
             provider_id="anthropic",
             display_name="Anthropic — Claude Haiku 3.5",

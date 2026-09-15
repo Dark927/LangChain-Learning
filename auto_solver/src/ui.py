@@ -204,9 +204,23 @@ class AppUI:
         self.info_lbl = ctk.CTkLabel(self.root, text="F8 = Pause/Resume  |  ESC = Stop", font=PRO_FONT, text_color="gray")
         self.info_lbl.pack(pady=(10, 5))
         
-        self.start_btn = ctk.CTkButton(self.root, text="Start Automation", font=SUBHEADER_FONT, 
-                                       height=45, corner_radius=6, command=self.start_automation)
-        self.start_btn.pack(pady=(0, 10), padx=40, fill="x")
+        # --- Quick AI Model Switcher ---
+        from provider_registry import ProviderRegistry
+        quick_frame = ctk.CTkFrame(self.root, fg_color="transparent")
+        quick_frame.pack(fill="x", padx=40, pady=(5, 0))
+        ctk.CTkLabel(quick_frame, text="Fallback Model:", font=PRO_FONT, text_color="gray").pack(side="left", padx=(0, 6))
+        quick_options = ["Disabled"] + ProviderRegistry.display_names()
+        self.quick_fallback_combo = ctk.CTkOptionMenu(
+            quick_frame, values=quick_options, dynamic_resizing=False,
+            font=PRO_FONT, width=280,
+            command=self._on_quick_fallback_changed
+        )
+        self.quick_fallback_combo.set(config.fallback_model if config.fallback_model else "Disabled")
+        self.quick_fallback_combo.pack(side="left", fill="x", expand=True)
+
+        self.start_btn = ctk.CTkButton(self.root, text="Start Automation", font=SUBHEADER_FONT,
+            height=45, corner_radius=6, command=self.start_automation)
+        self.start_btn.pack(pady=(6, 10), padx=40, fill="x")
         
         # Open with a spacious default size
         self.root.geometry("480x730")
@@ -487,6 +501,17 @@ class AppUI:
                 self.root.destroy()
 
         ctk.CTkButton(self.settings_win, text="Save & Close", font=SUBHEADER_FONT, height=40, command=save_and_close).pack(pady=10)
+
+    def _on_quick_fallback_changed(self, selected: str) -> None:
+        """Immediately persist the quick-switcher selection to config and disk."""
+        config.fallback_model = "" if selected == "Disabled" else selected
+        config.save_to_file()
+        # Keep settings window in sync if it's open
+        if hasattr(self, "fallback_combo"):
+            try:
+                self.fallback_combo.set(selected)
+            except Exception:
+                pass
 
     def toggle_theme(self):
         current = ctk.get_appearance_mode()
