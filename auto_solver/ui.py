@@ -105,6 +105,13 @@ class AppUI:
         edit_menu = tk.Menu(self.menubar, tearoff=0)
         edit_menu.add_command(label="Targeting Options", command=self.select_region)
         self.menubar.add_cascade(label="Edit", menu=edit_menu)
+
+        # Presets Menu
+        presets_menu = tk.Menu(self.menubar, tearoff=0)
+        presets_menu.add_command(label="Manage Presets...", command=self.open_presets_dashboard)
+        presets_menu.add_separator()
+        presets_menu.add_command(label="Save Current as Preset...", command=self.open_save_preset_window)
+        self.menubar.add_cascade(label="Presets", menu=presets_menu)
         
         # Preferences Menu
         pref_menu = tk.Menu(self.menubar, tearoff=0)
@@ -578,11 +585,7 @@ class AppUI:
         overlay.focus_force()
 
     def _get_theme_colors(self):
-        if config.work_mode == "Google Forms":
-            # Light Purple theme for Google Forms
-            return ["#a855f7", "#9333ea"], ["#9333ea", "#7e22ce"]
-        # Classic Blue theme
-        return ["#3B8ED0", "#1F6AA5"], ["#36719F", "#144870"]
+        return config.theme_color_primary, config.theme_color_hover
 
     def _apply_theme_colors(self):
         fg, hover = self._get_theme_colors()
@@ -644,6 +647,154 @@ class AppUI:
         self.root.after(0, lambda: self.start_btn.configure(text="Start Automation"))
         self.root.after(0, self._apply_theme_colors)
         self.root.after(0, lambda: self._update_status("🛑 Idle"))
+
+    def open_save_preset_window(self):
+        import dataclasses
+        import preset_manager
+        
+        win = ctk.CTkToplevel(self.root)
+        win.title("Save Preset")
+        win.geometry("400x350")
+        win.attributes('-topmost', True)
+        
+        ctk.CTkLabel(win, text="Save Current Mode as Preset", font=HEADER_FONT).pack(pady=15)
+        
+        ctk.CTkLabel(win, text="Preset Name:", font=PRO_FONT).pack(pady=(10,0))
+        name_entry = ctk.CTkEntry(win, width=250, font=PRO_FONT)
+        name_entry.pack(pady=5)
+        name_entry.insert(0, f"My {config.work_mode} Preset")
+        
+        ctk.CTkLabel(win, text="Accent Color:", font=PRO_FONT).pack(pady=(10,0))
+        color_combo = ctk.CTkOptionMenu(win, values=["Classic Blue", "Light Purple", "Emerald Green", "Amber Orange", "Rose Red"], font=PRO_FONT)
+        color_combo.set("Classic Blue")
+        color_combo.pack(pady=5)
+        
+        def save():
+            name = name_entry.get().strip()
+            if not name: return
+            
+            c = color_combo.get()
+            colors = {
+                "Classic Blue": ("#3B8ED0", "#1F6AA5"),
+                "Light Purple": ("#a855f7", "#9333ea"),
+                "Emerald Green": ("#10b981", "#047857"),
+                "Amber Orange": ("#f59e0b", "#b45309"),
+                "Rose Red": ("#ef4444", "#b91c1c")
+            }
+            primary, hover = colors.get(c, colors["Classic Blue"])
+            
+            preset_data = dataclasses.asdict(config)
+            preset_data["preset_name"] = name
+            preset_data["theme_color_primary"] = primary
+            preset_data["theme_color_hover"] = hover
+            
+            # also save to config right now
+            config.theme_color_primary = primary
+            config.theme_color_hover = hover
+            self._apply_theme_colors()
+            
+            preset_manager.add_preset(preset_data)
+            messagebox.showinfo("Success", f"Preset '{name}' saved successfully!", parent=win)
+            win.destroy()
+            
+        ctk.CTkButton(win, text="Save Preset", command=save, font=PRO_FONT).pack(pady=20)
+
+    def open_presets_dashboard(self):
+        import preset_manager
+        from tkinter import filedialog
+        
+        win = ctk.CTkToplevel(self.root)
+        win.title("Manage Presets")
+        win.geometry("600x500")
+        win.attributes('-topmost', True)
+        
+        ctk.CTkLabel(win, text="Saved Presets", font=HEADER_FONT).pack(pady=15)
+        
+        scroll = ctk.CTkScrollableFrame(win)
+        scroll.pack(fill="both", expand=True, padx=20, pady=10)
+        
+        def refresh():
+            for w in scroll.winfo_children():
+                w.destroy()
+                
+            presets = preset_manager.load_presets()
+            if not presets:
+                ctk.CTkLabel(scroll, text="No presets saved yet.", font=PRO_FONT, text_color="gray").pack(pady=20)
+                
+            for p in presets:
+                row = ctk.CTkFrame(scroll, corner_radius=6)
+                row.pack(fill="x", padx=5, pady=5)
+                
+                info = ctk.CTkFrame(row, fg_color="transparent")
+                info.pack(side="left", fill="both", expand=True, padx=10, pady=10)
+                
+                name = p.get("preset_name", "Unknown Preset")
+                mode = p.get("work_mode", "Standard")
+                
+                ctk.CTkLabel(info, text=name, font=SUBHEADER_FONT, anchor="w").pack(fill="x")
+                ctk.CTkLabel(info, text=f"Mode: {mode}", font=("Consolas", 11), text_color="gray", anchor="w").pack(fill="x")
+                
+                btn_frame = ctk.CTkFrame(row, fg_color="transparent")
+                btn_frame.pack(side="right", padx=10, pady=10)
+                
+                pid = p["id"]
+                
+                ctk.CTkButton(btn_frame, text="Load", width=60, font=PRO_FONT, fg_color="#10b981", hover_color="#047857",
+                              command=lambda data=p: load_preset(data)).pack(side="left", padx=2)
+                ctk.CTkButton(btn_frame, text="Export", width=60, font=PRO_FONT,
+                              command=lambda data=p: export_preset(data)).pack(side="left", padx=2)
+                ctk.CTkButton(btn_frame, text="Delete", width=60, font=PRO_FONT, fg_color="#ef4444", hover_color="#b91c1c",
+                              command=lambda id=pid: delete_preset(id)).pack(side="left", padx=2)
+                              
+        def load_preset(data):
+            for k, v in data.items():
+                if hasattr(config, k):
+                    # Lists (like click_sequence) are copied cleanly by JSON load
+                    # However, PyAutoGUI expects tuples for regions and positions
+                    if k == 'question_region' and isinstance(v, list):
+                        v = tuple(v)
+                    elif k == 'click_sequence' and isinstance(v, list):
+                        for act in v:
+                            if 'pos' in act and isinstance(act['pos'], list):
+                                act['pos'] = tuple(act['pos'])
+                            if 'color' in act and isinstance(act['color'], list):
+                                act['color'] = tuple(act['color'])
+                    
+                    setattr(config, k, v)
+                    
+            self.mode_combo.set(config.work_mode)
+            self.on_mode_changed(config.work_mode)
+            messagebox.showinfo("Loaded", f"Preset '{data.get('preset_name')}' loaded successfully!", parent=win)
+            win.destroy()
+            
+        def delete_preset(pid):
+            if messagebox.askyesno("Confirm Delete", "Are you sure you want to delete this preset?", parent=win):
+                preset_manager.delete_preset(pid)
+                refresh()
+                
+        def export_preset(data):
+            path = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("JSON Files", "*.json")], initialfile=f"{data.get('preset_name', 'preset')}.json", parent=win)
+            if path:
+                preset_manager.export_preset(data, path)
+                messagebox.showinfo("Exported", f"Preset exported to {path}", parent=win)
+                
+        bottom_frame = ctk.CTkFrame(win, fg_color="transparent")
+        bottom_frame.pack(fill="x", padx=20, pady=10)
+        
+        def import_preset():
+            path = filedialog.askopenfilename(filetypes=[("JSON Files", "*.json")], parent=win)
+            if path:
+                try:
+                    data = preset_manager.import_preset(path)
+                    preset_manager.add_preset(data)
+                    refresh()
+                    messagebox.showinfo("Imported", "Preset imported successfully!", parent=win)
+                except Exception as e:
+                    messagebox.showerror("Error", f"Failed to import: {e}", parent=win)
+                    
+        ctk.CTkButton(bottom_frame, text="📥 Import Preset from File", command=import_preset, font=PRO_FONT).pack(side="right")
+        
+        refresh()
 
     def run(self):
         self.root.mainloop()

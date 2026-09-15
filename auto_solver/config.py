@@ -42,4 +42,8 @@ class AppConfig:
     # Enable AI formatting and saving of final QA logs
     save_qa_logs: bool = True
 
+    # Theme colors for the UI (allows saving color per preset)
+    theme_color_primary: str = "#3B8ED0"
+    theme_color_hover: str = "#1F6AA5"
+
 config = AppConfig()
