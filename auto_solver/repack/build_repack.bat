@@ -5,11 +5,15 @@ echo      AUTO SOLVER PRO - REPACK BUILDER
 echo ==============================================
 echo.
 
-echo [1/3] Installing/Verifying Python Dependencies...
-python -m pip install pyinstaller customtkinter pillow pyautogui pytesseract pyperclip
+echo [1/4] Installing/Verifying Python Dependencies...
+python -m pip install pyinstaller customtkinter pillow pyautogui pytesseract pyperclip cairosvg
 
 echo.
-echo [2/3] Compiling Python Code to Standalone Binaries...
+echo [2/4] Generating favicon.ico from logo.svg...
+python repack\svg_to_ico.py logo.svg favicon.ico
+
+echo.
+echo [3/4] Compiling Python Code to Standalone Binaries...
 echo (This may take a minute or two...)
 python -m PyInstaller --noconfirm --onedir --windowed --icon="favicon.ico" --add-data "favicon.ico;." --add-data "themes;themes" --name "AutoSolverPro" src\main.py
 
@@ -24,7 +28,7 @@ if exist "%PYTHON3_DLL%" (
 move AutoSolverPro.spec repack\ >nul 2>&1
 
 echo.
-echo [3/3] Building Repack Installer...
+echo [4/4] Building Repack Installer...
 :: Check if Inno Setup is installed in common directories
 set "INNO_PATH="
 if exist "C:\Program Files (x86)\Inno Setup 7\ISCC.exe" set "INNO_PATH=C:\Program Files (x86)\Inno Setup 7\ISCC.exe"
