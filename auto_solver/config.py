@@ -45,5 +45,42 @@ class AppConfig:
     # Theme colors for the UI (allows saving color per preset)
     theme_color_primary: str = "#3B8ED0"
     theme_color_hover: str = "#1F6AA5"
+    
+    # Global Appearance Theme (VSCode-like variants)
+    # Built-in Options: "blue", "green", "dark-blue", or any custom .json theme
+    ctk_theme: str = "blue"
+    
+    # "System", "Dark", "Light"
+    appearance_mode: str = "System"
+
+    def save_to_file(self):
+        import json, dataclasses
+        try:
+            with open("app_settings.json", "w", encoding="utf-8") as f:
+                json.dump(dataclasses.asdict(self), f, indent=4)
+        except Exception as e:
+            print(f"Failed to save settings: {e}")
+
+    def load_from_file(self):
+        import json, os
+        if os.path.exists("app_settings.json"):
+            try:
+                with open("app_settings.json", "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                for k, v in data.items():
+                    if hasattr(self, k):
+                        # Safely cast tuples
+                        if k == 'question_region' and isinstance(v, list):
+                            v = tuple(v)
+                        elif k == 'click_sequence' and isinstance(v, list):
+                            for act in v:
+                                if 'pos' in act and isinstance(act['pos'], list):
+                                    act['pos'] = tuple(act['pos'])
+                                if 'color' in act and isinstance(act['color'], list):
+                                    act['color'] = tuple(act['color'])
+                        setattr(self, k, v)
+            except Exception as e:
+                print(f"Failed to load settings: {e}")
 
 config = AppConfig()
+config.load_from_file()

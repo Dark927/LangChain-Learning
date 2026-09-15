@@ -57,6 +57,14 @@ class SelectionOverlay:
 class AppUI:
     def __init__(self):
         self.runner = Runner()
+        
+        # Apply global appearance and theme settings
+        ctk.set_appearance_mode(config.appearance_mode)
+        try:
+            ctk.set_default_color_theme(config.ctk_theme)
+        except Exception:
+            ctk.set_default_color_theme("blue")
+            
         self.root = ctk.CTk()
         self.root.title("Auto Solver Pro")
         # We don't hardcode geometry here anymore; let it auto-wrap
@@ -375,6 +383,24 @@ class AppUI:
         self.save_logs_cb = ctk.CTkCheckBox(frame, text="Enable AI Cleanup & Save Final QA Logs", variable=self.save_logs_var, font=PRO_FONT)
         self.save_logs_cb.pack(fill="x", pady=(5, 15), padx=10)
         
+        # Appearance Options
+        ctk.CTkLabel(frame, text="Global Appearance & Theme", font=SUBHEADER_FONT).pack(pady=(15, 5))
+        
+        app_frame = ctk.CTkFrame(frame, fg_color="transparent")
+        app_frame.pack(fill="x", pady=5, padx=10)
+        
+        ctk.CTkLabel(app_frame, text="Mode:", font=PRO_FONT).pack(side="left")
+        self.app_mode_combo = ctk.CTkOptionMenu(app_frame, values=["System", "Dark", "Light"], font=PRO_FONT, width=100)
+        self.app_mode_combo.set(config.appearance_mode)
+        self.app_mode_combo.pack(side="left", padx=(5, 10))
+        
+        ctk.CTkLabel(app_frame, text="Base Theme:", font=PRO_FONT).pack(side="left", padx=(5, 5))
+        self.ctk_theme_combo = ctk.CTkOptionMenu(app_frame, values=["blue", "green", "dark-blue"], font=PRO_FONT, width=100)
+        self.ctk_theme_combo.set(config.ctk_theme)
+        self.ctk_theme_combo.pack(side="left")
+        
+        current_ctk_theme = config.ctk_theme
+        
         def save_and_close():
             try:
                 delay_val = float(self.thinking_delay_entry.get().strip())
@@ -398,19 +424,33 @@ class AppUI:
             config.show_step_timings = self.timings_var.get()
             config.save_qa_logs = self.save_logs_var.get()
             
+            # Apply Appearance
+            config.appearance_mode = self.app_mode_combo.get()
+            config.ctk_theme = self.ctk_theme_combo.get()
+            ctk.set_appearance_mode(config.appearance_mode)
+            
             # Re-render sequence in case anything changed
             self.render_sequence_ui()
             
+            # Save all global settings to disk
+            config.save_to_file()
+            
             self.settings_win.destroy()
+            
+            if config.ctk_theme != current_ctk_theme:
+                messagebox.showinfo("Theme Saved", "Base UI Theme changed! Please restart the application for all color styles to apply completely.")
 
         ctk.CTkButton(self.settings_win, text="Save & Close", font=SUBHEADER_FONT, height=40, command=save_and_close).pack(pady=10)
 
     def toggle_theme(self):
         current = ctk.get_appearance_mode()
         if current == "Light":
-            ctk.set_appearance_mode("Dark")
+            new_mode = "Dark"
         else:
-            ctk.set_appearance_mode("Light")
+            new_mode = "Light"
+        ctk.set_appearance_mode(new_mode)
+        config.appearance_mode = new_mode
+        config.save_to_file()
 
     def check_quota(self):
         import subprocess
