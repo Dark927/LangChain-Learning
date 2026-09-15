@@ -95,7 +95,7 @@ class Runner:
             self._log("Error: Question region is not set.", "red")
             return
             
-        if not config.submit_button_pos or not config.submit_button_color:
+        if not config.submit_button_pos:
             self._log("Error: Submit button position is not set.", "red")
             return
             
@@ -169,28 +169,32 @@ class Runner:
                     self._log(f"Simulating human thinking... waiting {config.thinking_delay} seconds.")
                     if not self.safe_sleep(config.thinking_delay): break
                 
-                # 6. Wait for submit button to turn expected color
-                self._set_status("Waiting for Submit")
-                self._log("Waiting for submit button to be ready...")
-                target_color = config.submit_button_color
                 pos = config.submit_button_pos
-                found_color = False
                 
-                for _ in range(100):
+                if config.check_submit_color:
+                    # 6. Wait for submit button to turn expected color
+                    self._set_status("Waiting for Submit")
+                    self._log("Waiting for submit button to be ready (matching color)...")
+                    target_color = config.submit_button_color
+                    found_color = False
+
+                    for _ in range(100):
+                        if self.stop_requested: break
+                        current_color = pyautogui.pixel(*pos)
+                        if self.color_match(current_color, target_color):
+                            found_color = True
+                            break
+                        time.sleep(0.1)
+
                     if self.stop_requested: break
-                    current_color = pyautogui.pixel(*pos)
-                    if self.color_match(current_color, target_color):
-                        found_color = True
+
+                    if not found_color:
+                        self._log("Submit button did not turn the expected color after 10 seconds. Stopping.", "red")
+                        self.is_running = False
                         break
-                    time.sleep(0.1)
-                    
-                if self.stop_requested: break
-                
-                if not found_color:
-                    self._log("Submit button did not turn the expected color after 10 seconds. Stopping.", "red")
-                    self.is_running = False
-                    break
-                    
+                else:
+                    self._log("Bypassing color match (disabled in settings).")
+
                 self._set_status("Clicking Submit")
                 self._log(f"Clicking submit button at {pos}...", "yellow")
                 pyautogui.moveTo(*pos, duration=0.2)

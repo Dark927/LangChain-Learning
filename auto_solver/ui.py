@@ -90,7 +90,7 @@ class AppUI:
         
         self.submit_lbl = ctk.CTkLabel(target_frame, text="Submit Button: Not Set", font=PRO_FONT)
         self.submit_lbl.pack(pady=2)
-        self.submit_btn = ctk.CTkButton(target_frame, text="Select Submit Pos & Color", command=self.select_submit, font=PRO_FONT, corner_radius=4)
+        self.submit_btn = ctk.CTkButton(target_frame, text="Select Submit Button", command=self.select_submit, font=PRO_FONT, corner_radius=4)
         self.submit_btn.pack(pady=(0, 10))
         
         # --- Native Top Menu Bar ---
@@ -373,7 +373,11 @@ class AppUI:
         
         self.save_logs_var = ctk.BooleanVar(value=config.save_qa_logs)
         self.save_logs_cb = ctk.CTkCheckBox(frame, text="Enable AI Cleanup & Save Final QA Logs", variable=self.save_logs_var, font=PRO_FONT)
-        self.save_logs_cb.pack(fill="x", pady=(5, 15), padx=10)
+        self.save_logs_cb.pack(fill="x", pady=(5, 5), padx=10)
+        
+        self.check_color_var = ctk.BooleanVar(value=config.check_submit_color)
+        self.check_color_cb = ctk.CTkCheckBox(frame, text="Require Submit Button Color Match (Standard Mode)", variable=self.check_color_var, font=PRO_FONT)
+        self.check_color_cb.pack(fill="x", pady=(5, 15), padx=10)
         
         def save_and_close():
             try:
@@ -397,6 +401,14 @@ class AppUI:
             config.model = self.model_combo.get().strip()
             config.show_step_timings = self.timings_var.get()
             config.save_qa_logs = self.save_logs_var.get()
+            config.check_submit_color = self.check_color_var.get()
+            
+            # Update the main UI label instantly if submit_button_pos exists
+            if config.submit_button_pos:
+                if config.check_submit_color:
+                    self.submit_lbl.configure(text=f"Submit: {config.submit_button_pos} | RGB: {config.submit_button_color}")
+                else:
+                    self.submit_lbl.configure(text=f"Submit: {config.submit_button_pos} (No Color Check)")
             
             self.settings_win.destroy()
 
@@ -480,14 +492,17 @@ class AppUI:
         self.region_lbl.configure(text=f"Question Region: {region}")
         
     def select_submit(self):
-        messagebox.showinfo("Select Submit", "Move your mouse to the center of the Submit button and press ENTER. We will record the position AND the color of the pixel.")
+        messagebox.showinfo("Select Submit", "Move your mouse to the center of the Submit button and press ENTER. We will record the position.")
         
         def wait_for_enter(event):
             pos = pyautogui.position()
             config.submit_button_pos = (pos.x, pos.y)
             color = pyautogui.pixel(pos.x, pos.y)
             config.submit_button_color = color
-            self.submit_lbl.configure(text=f"Submit: {pos} | RGB: {color}")
+            if config.check_submit_color:
+                self.submit_lbl.configure(text=f"Submit: {pos} | RGB: {color}")
+            else:
+                self.submit_lbl.configure(text=f"Submit: {pos} (No Color Check)")
             overlay.destroy()
             self.root.deiconify()
             
@@ -529,7 +544,10 @@ class AppUI:
             self.submit_btn.pack(pady=(0, 10))
             
             if config.submit_button_pos:
-                self.submit_lbl.configure(text=f"Submit: {config.submit_button_pos} | RGB: {config.submit_button_color}", text_color=("gray10", "gray90"))
+                if config.check_submit_color:
+                    self.submit_lbl.configure(text=f"Submit: {config.submit_button_pos} | RGB: {config.submit_button_color}", text_color=("gray10", "gray90"))
+                else:
+                    self.submit_lbl.configure(text=f"Submit: {config.submit_button_pos} (No Color Check)", text_color=("gray10", "gray90"))
             else:
                 self.submit_lbl.configure(text="Submit Button: Not Set", text_color=("gray10", "gray90"))
                 

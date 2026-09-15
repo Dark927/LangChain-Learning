@@ -41,5 +41,8 @@ class AppConfig:
     
     # Enable AI formatting and saving of final QA logs
     save_qa_logs: bool = True
+    
+    # Whether to strictly wait for the submit button to match the captured pixel color
+    check_submit_color: bool = True
 
 config = AppConfig()
