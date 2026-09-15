@@ -87,7 +87,7 @@ class AppUI:
         self.region_btn = ctk.CTkButton(target_frame, text="Select Question Region", command=self.select_region, font=PRO_FONT, corner_radius=4)
         self.region_btn.pack(pady=(0, 10))
         
-        self.sequence_container = ctk.CTkFrame(target_frame, fg_color="transparent")
+        self.sequence_container = ctk.CTkScrollableFrame(target_frame, fg_color="transparent", height=100)
         self.sequence_container.pack(fill="x", pady=2)        
         # --- Native Top Menu Bar ---
         self.menubar = tk.Menu(self.root)
@@ -549,6 +549,9 @@ class AppUI:
             
         add_btn = ctk.CTkButton(self.sequence_container, text="➕ Add Click Action", width=140, height=28, font=PRO_FONT, fg_color="transparent", border_width=1, text_color=("gray10", "gray90"), hover_color=("gray85", "gray25"), command=self.add_action)
         add_btn.pack(pady=(5, 10))
+        
+        desired_height = min(250, len(config.click_sequence) * 90 + 50)
+        self.sequence_container.configure(height=desired_height)
         
         self.snap_window_size()
 
