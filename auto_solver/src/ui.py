@@ -67,6 +67,14 @@ class AppUI:
             
         self.root = ctk.CTk()
         self.root.title("Auto Solver Pro")
+        import sys, os
+        base_path = sys._MEIPASS if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS') else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        icon_path = os.path.join(base_path, "favicon.ico")
+        if os.path.exists(icon_path):
+            try:
+                self.root.iconbitmap(icon_path)
+            except Exception:
+                pass
         # We don't hardcode geometry here anymore; let it auto-wrap
         
         # Connect callbacks from the runner

@@ -12,6 +12,7 @@ DefaultGroupName=Auto Solver Pro
 ; Output Installer EXE details
 OutputDir=..\Output
 OutputBaseFilename=AutoSolverPro_Setup_v1.0
+SetupIconFile=..\favicon.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
 

@@ -11,7 +11,7 @@ python -m pip install pyinstaller customtkinter pillow pyautogui pytesseract pyp
 echo.
 echo [2/3] Compiling Python Code to Standalone Binaries...
 echo (This may take a minute or two...)
-python -m PyInstaller --noconfirm --onedir --windowed --add-data "themes;themes" --name "AutoSolverPro" src\main.py
+python -m PyInstaller --noconfirm --onedir --windowed --icon="favicon.ico" --add-data "favicon.ico;." --add-data "themes;themes" --name "AutoSolverPro" src\main.py
 
 echo.
 echo [Fix] Copying missing python3.dll (PyInstaller workaround)...
