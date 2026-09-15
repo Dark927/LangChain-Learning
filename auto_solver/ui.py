@@ -100,10 +100,7 @@ class AppUI:
         file_menu.add_command(label="Exit", command=self.root.quit)
         self.menubar.add_cascade(label="File", menu=file_menu)
         
-        # Edit Menu
-        edit_menu = tk.Menu(self.menubar, tearoff=0)
-        edit_menu.add_command(label="Targeting Options", command=self.select_region)
-        self.menubar.add_cascade(label="Edit", menu=edit_menu)
+
 
         # Presets Menu
         presets_menu = tk.Menu(self.menubar, tearoff=0)
@@ -612,6 +609,14 @@ class AppUI:
     def on_mode_changed(self, new_val):
         if new_val in ["Standard", "Google Forms"]:
             config.work_mode = new_val
+            # Reset colors to defaults for built-in modes
+            if new_val == "Standard":
+                config.theme_color_primary = "#3B8ED0"
+                config.theme_color_hover = "#1F6AA5"
+                config.click_sequence = [{"name": "Action 1", "pos": None, "color": None, "check_color": True}]
+            elif new_val == "Google Forms":
+                config.theme_color_primary = "#a855f7"
+                config.theme_color_hover = "#9333ea"
         else:
             import preset_manager
             presets = preset_manager.load_presets()
