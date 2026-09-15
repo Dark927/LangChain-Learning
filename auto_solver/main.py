@@ -12,8 +12,11 @@ def setup_environment():
 def main():
     setup_environment()
     print("Initializing Auto Solver...")
-    app = AppUI()
-    app.run()
+    while True:
+        app = AppUI()
+        app.run()
+        if not getattr(app, 'wants_restart', False):
+            break
 
 if __name__ == "__main__":
     main()

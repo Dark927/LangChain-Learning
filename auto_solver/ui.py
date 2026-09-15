@@ -395,8 +395,22 @@ class AppUI:
         self.app_mode_combo.pack(side="left", padx=(5, 10))
         
         ctk.CTkLabel(app_frame, text="Base Theme:", font=PRO_FONT).pack(side="left", padx=(5, 5))
-        self.ctk_theme_combo = ctk.CTkOptionMenu(app_frame, values=["blue", "green", "dark-blue"], font=PRO_FONT, width=100)
-        self.ctk_theme_combo.set(config.ctk_theme)
+        
+        self.THEMES_MAP = {
+            "Default Blue": "blue",
+            "Default Green": "green",
+            "Default Dark Blue": "dark-blue",
+            "Dracula": "themes/dracula.json",
+            "Monokai": "themes/monokai.json",
+            "One Dark": "themes/onedark.json",
+            "Synthwave": "themes/synthwave.json"
+        }
+        
+        self.ctk_theme_combo = ctk.CTkOptionMenu(app_frame, values=list(self.THEMES_MAP.keys()), font=PRO_FONT, width=120)
+        
+        # Reverse lookup for initial value
+        initial_theme_name = next((k for k, v in self.THEMES_MAP.items() if v == config.ctk_theme), "Default Blue")
+        self.ctk_theme_combo.set(initial_theme_name)
         self.ctk_theme_combo.pack(side="left")
         
         current_ctk_theme = config.ctk_theme
@@ -426,7 +440,7 @@ class AppUI:
             
             # Apply Appearance
             config.appearance_mode = self.app_mode_combo.get()
-            config.ctk_theme = self.ctk_theme_combo.get()
+            config.ctk_theme = self.THEMES_MAP.get(self.ctk_theme_combo.get(), "blue")
             ctk.set_appearance_mode(config.appearance_mode)
             
             # Re-render sequence in case anything changed
@@ -438,7 +452,10 @@ class AppUI:
             self.settings_win.destroy()
             
             if config.ctk_theme != current_ctk_theme:
-                messagebox.showinfo("Theme Saved", "Base UI Theme changed! Please restart the application for all color styles to apply completely.")
+                # Tell main loop to gently restart the UI window to apply the new JSON theme instantly
+                self.wants_restart = True
+                self.root.quit()
+                self.root.destroy()
 
         ctk.CTkButton(self.settings_win, text="Save & Close", font=SUBHEADER_FONT, height=40, command=save_and_close).pack(pady=10)
 
