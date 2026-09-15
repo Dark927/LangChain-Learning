@@ -665,23 +665,46 @@ class AppUI:
         name_entry.insert(0, f"My {config.work_mode} Preset")
         
         ctk.CTkLabel(win, text="Accent Color:", font=PRO_FONT).pack(pady=(10,0))
-        color_combo = ctk.CTkOptionMenu(win, values=["Classic Blue", "Light Purple", "Emerald Green", "Amber Orange", "Rose Red"], font=PRO_FONT)
-        color_combo.set("Classic Blue")
-        color_combo.pack(pady=5)
+        
+        self.selected_preset_color = config.theme_color_primary
+        
+        def pick_color():
+            from tkinter import colorchooser
+            color = colorchooser.askcolor(title="Select Accent Color", initialcolor=self.selected_preset_color, parent=win)
+            if color[1]:
+                self.selected_preset_color = color[1]
+                color_btn.configure(fg_color=self.selected_preset_color)
+                # Ensure text is readable against the background
+                color_btn.configure(text_color="black" if _is_light(self.selected_preset_color) else "white")
+                
+        def _is_light(hex_str):
+            hex_str = hex_str.lstrip('#')
+            if len(hex_str) != 6: return False
+            r, g, b = tuple(int(hex_str[i:i+2], 16) for i in (0, 2, 4))
+            return (r * 0.299 + g * 0.587 + b * 0.114) > 186
+            
+        color_btn = ctk.CTkButton(win, text="Choose Color", fg_color=self.selected_preset_color, 
+                                  text_color="black" if _is_light(self.selected_preset_color) else "white",
+                                  font=PRO_FONT, command=pick_color)
+        color_btn.pack(pady=5)
         
         def save():
             name = name_entry.get().strip()
             if not name: return
             
-            c = color_combo.get()
-            colors = {
-                "Classic Blue": ("#3B8ED0", "#1F6AA5"),
-                "Light Purple": ("#a855f7", "#9333ea"),
-                "Emerald Green": ("#10b981", "#047857"),
-                "Amber Orange": ("#f59e0b", "#b45309"),
-                "Rose Red": ("#ef4444", "#b91c1c")
-            }
-            primary, hover = colors.get(c, colors["Classic Blue"])
+            primary = self.selected_preset_color
+            
+            # Auto-calculate a slightly darker hover color
+            def darken_hex(hex_str, factor=0.85):
+                hex_str = hex_str.lstrip('#')
+                if len(hex_str) != 6: return primary
+                r, g, b = tuple(int(hex_str[i:i+2], 16) for i in (0, 2, 4))
+                r = int(max(0, r * factor))
+                g = int(max(0, g * factor))
+                b = int(max(0, b * factor))
+                return f"#{r:02x}{g:02x}{b:02x}"
+                
+            hover = darken_hex(primary)
             
             preset_data = dataclasses.asdict(config)
             preset_data["preset_name"] = name
