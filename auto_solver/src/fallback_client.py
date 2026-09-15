@@ -37,10 +37,17 @@ def _build_model(model_def: ProviderModel) -> tuple[ProviderModel, BaseChatModel
     os.environ[model_def.requires_key] = key_value
 
     try:
-        model = init_chat_model(
-            model=model_def.model_id,
-            model_provider=model_def.provider_id,
-        )
+        if model_def.provider_id == "openrouter":
+            from langchain_openrouter import ChatOpenRouter
+            model = ChatOpenRouter(
+                model=model_def.model_id,
+                api_key=key_value,
+            )
+        else:
+            model = init_chat_model(
+                model=model_def.model_id,
+                model_provider=model_def.provider_id,
+            )
         return (model_def, model)
     except Exception as e:
         print(f"[Fallback] Failed to build model '{model_def.display_name}': {e}")

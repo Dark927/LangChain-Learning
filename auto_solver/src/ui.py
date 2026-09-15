@@ -204,19 +204,59 @@ class AppUI:
         self.info_lbl = ctk.CTkLabel(self.root, text="F8 = Pause/Resume  |  ESC = Stop", font=PRO_FONT, text_color="gray")
         self.info_lbl.pack(pady=(10, 5))
         
-        # --- Quick AI Model Switcher ---
+        # --- Quick AI Model Switchers ---
         from provider_registry import ProviderRegistry
-        quick_frame = ctk.CTkFrame(self.root, fg_color="transparent")
-        quick_frame.pack(fill="x", padx=40, pady=(5, 0))
-        ctk.CTkLabel(quick_frame, text="Fallback Model:", font=PRO_FONT, text_color="gray").pack(side="left", padx=(0, 6))
-        quick_options = ["Disabled"] + ProviderRegistry.display_names()
-        self.quick_fallback_combo = ctk.CTkOptionMenu(
-            quick_frame, values=quick_options, dynamic_resizing=False,
-            font=PRO_FONT, width=280,
-            command=self._on_quick_fallback_changed
+        
+        # Main Agent Dropdown
+        quick_frame_main = ctk.CTkFrame(self.root, fg_color="transparent")
+        quick_frame_main.pack(fill="x", padx=40, pady=(15, 0))
+        ctk.CTkLabel(quick_frame_main, text="Main Agent:", font=PRO_FONT, text_color="gray", width=95, anchor="w").pack(side="left", padx=(0, 6))
+        
+        # Main agent options are defined in the Settings menu (AGY remote models)
+        main_options = [
+            "Gemini 3.7 Flash (High)", "Gemini 3.7 Flash (Medium)", "Gemini 3.6 Flash (High)",
+            "Gemini 3.5 Flash (High)", "Gemini 3.1 Pro (High)", "Claude Sonnet 4.6 (Thinking)", "GPT-OSS 120B (Medium)"
+        ]
+        self.quick_main_combo = ctk.CTkOptionMenu(
+            quick_frame_main, values=main_options, dynamic_resizing=False, font=PRO_FONT, width=220,
+            command=self._on_quick_main_changed
         )
-        self.quick_fallback_combo.set(config.fallback_model if config.fallback_model else "Disabled")
-        self.quick_fallback_combo.pack(side="left", fill="x", expand=True)
+        self.quick_main_combo.set(config.model)
+        self.quick_main_combo.pack(side="left", fill="x", expand=True)
+        
+        # Free Tier Fallback Dropdown
+        quick_frame_free = ctk.CTkFrame(self.root, fg_color="transparent")
+        quick_frame_free.pack(fill="x", padx=40, pady=(5, 0))
+        ctk.CTkLabel(quick_frame_free, text="Fallback (Free):", font=PRO_FONT, text_color="gray", width=95, anchor="w").pack(side="left", padx=(0, 6))
+        free_options = ["Disabled"] + ProviderRegistry.get_free_models()
+        self.quick_fallback_free = ctk.CTkOptionMenu(
+            quick_frame_free, values=free_options, dynamic_resizing=False, font=PRO_FONT, width=220,
+            command=self._on_quick_fallback_free_changed
+        )
+        self.quick_fallback_free.pack(side="left", fill="x", expand=True)
+        
+        # Paid Tier Dropdown
+        quick_frame_paid = ctk.CTkFrame(self.root, fg_color="transparent")
+        quick_frame_paid.pack(fill="x", padx=40, pady=(5, 0))
+        ctk.CTkLabel(quick_frame_paid, text="Fallback (Paid):", font=PRO_FONT, text_color="gray", width=95, anchor="w").pack(side="left", padx=(0, 6))
+        paid_options = ["Disabled"] + ProviderRegistry.get_paid_models()
+        self.quick_fallback_paid = ctk.CTkOptionMenu(
+            quick_frame_paid, values=paid_options, dynamic_resizing=False, font=PRO_FONT, width=220,
+            command=self._on_quick_fallback_paid_changed
+        )
+        self.quick_fallback_paid.pack(side="left", fill="x", expand=True)
+
+        # Initialize the correct combobox based on saved config
+        saved_model = config.fallback_model if config.fallback_model else "Disabled"
+        if saved_model in free_options:
+            self.quick_fallback_free.set(saved_model)
+            self.quick_fallback_paid.set("Disabled")
+        elif saved_model in paid_options:
+            self.quick_fallback_paid.set(saved_model)
+            self.quick_fallback_free.set("Disabled")
+        else:
+            self.quick_fallback_free.set("Disabled")
+            self.quick_fallback_paid.set("Disabled")
 
         self.start_btn = ctk.CTkButton(self.root, text="Start Automation", font=SUBHEADER_FONT,
             height=45, corner_radius=6, command=self.start_automation)
@@ -368,15 +408,44 @@ class AppUI:
         ctk.CTkButton(model_inner, text="View Quota", command=self.check_quota, width=80, font=PRO_FONT).pack(side="left")
         ctk.CTkButton(model_inner, text="Change Account", command=self.change_account, width=100, font=PRO_FONT, fg_color="#C0392B", hover_color="#922B21").pack(side="right", padx=(5, 0))
 
-        # Fallback LLM
+        # Fallback LLM (Free vs Paid)
         ctk.CTkLabel(frame, text="Fallback AI Model (When Antigravity Fails)", font=SUBHEADER_FONT).pack(pady=(15, 2))
-        ctk.CTkLabel(frame, text="Activates automatically if Antigravity returns no answer. Free tiers reset daily.", font=("Roboto", 11), text_color="gray").pack(pady=(0, 5))
+        ctk.CTkLabel(frame, text="Activates automatically if Antigravity returns no answer.", font=("Roboto", 11), text_color="gray").pack(pady=(0, 5))
 
         from provider_registry import ProviderRegistry
-        fallback_options = ["Disabled"] + ProviderRegistry.display_names()
-        self.fallback_combo = ctk.CTkOptionMenu(frame, values=fallback_options, dynamic_resizing=False, font=PRO_FONT)
-        self.fallback_combo.set(config.fallback_model if config.fallback_model else "Disabled")
-        self.fallback_combo.pack(fill="x", padx=10, pady=(0, 5))
+        free_options = ["Disabled"] + ProviderRegistry.get_free_models()
+        paid_options = ["Disabled"] + ProviderRegistry.get_paid_models()
+
+        row_free = ctk.CTkFrame(frame, fg_color="transparent")
+        row_free.pack(fill="x", padx=10, pady=(0, 5))
+        ctk.CTkLabel(row_free, text="Free Tier Models:", font=PRO_FONT, width=120, anchor="w").pack(side="left")
+        self.fallback_combo_free = ctk.CTkOptionMenu(row_free, values=free_options, dynamic_resizing=False, font=PRO_FONT)
+        self.fallback_combo_free.pack(side="left", fill="x", expand=True)
+
+        row_paid = ctk.CTkFrame(frame, fg_color="transparent")
+        row_paid.pack(fill="x", padx=10, pady=(0, 5))
+        ctk.CTkLabel(row_paid, text="Paid Tier Models:", font=PRO_FONT, width=120, anchor="w").pack(side="left")
+        self.fallback_combo_paid = ctk.CTkOptionMenu(row_paid, values=paid_options, dynamic_resizing=False, font=PRO_FONT)
+        self.fallback_combo_paid.pack(side="left", fill="x", expand=True)
+
+        def _on_settings_free_change(val):
+            if val != "Disabled": self.fallback_combo_paid.set("Disabled")
+        def _on_settings_paid_change(val):
+            if val != "Disabled": self.fallback_combo_free.set("Disabled")
+            
+        self.fallback_combo_free.configure(command=_on_settings_free_change)
+        self.fallback_combo_paid.configure(command=_on_settings_paid_change)
+
+        saved_model = config.fallback_model if config.fallback_model else "Disabled"
+        if saved_model in free_options:
+            self.fallback_combo_free.set(saved_model)
+            self.fallback_combo_paid.set("Disabled")
+        elif saved_model in paid_options:
+            self.fallback_combo_paid.set(saved_model)
+            self.fallback_combo_free.set("Disabled")
+        else:
+            self.fallback_combo_free.set("Disabled")
+            self.fallback_combo_paid.set("Disabled")
 
         ctk.CTkButton(frame, text="⚙  Configure API Keys", command=self.open_api_keys_window, font=PRO_FONT, height=32).pack(fill="x", padx=10, pady=(0, 10))
 
@@ -474,6 +543,7 @@ class AppUI:
             config.tesseract_path = self.tesseract_entry.get().strip()
             config.ocr_language = self.ocr_lang_entry.get().strip() or "eng"
             config.model = self.model_combo.get().strip()
+            self.quick_main_combo.set(config.model)
             config.show_step_timings = self.timings_var.get()
             config.save_qa_logs = self.save_logs_var.get()
             
@@ -483,8 +553,20 @@ class AppUI:
             ctk.set_appearance_mode(config.appearance_mode)
 
             # Save selected fallback model (empty string means disabled)
-            selected_fallback = self.fallback_combo.get()
-            config.fallback_model = "" if selected_fallback == "Disabled" else selected_fallback
+            free_val = self.fallback_combo_free.get()
+            paid_val = self.fallback_combo_paid.get()
+            if free_val != "Disabled":
+                config.fallback_model = free_val
+                self.quick_fallback_free.set(free_val)
+                self.quick_fallback_paid.set("Disabled")
+            elif paid_val != "Disabled":
+                config.fallback_model = paid_val
+                self.quick_fallback_paid.set(paid_val)
+                self.quick_fallback_free.set("Disabled")
+            else:
+                config.fallback_model = ""
+                self.quick_fallback_free.set("Disabled")
+                self.quick_fallback_paid.set("Disabled")
             
             # Re-render sequence in case anything changed
             self.render_sequence_ui()
@@ -502,14 +584,44 @@ class AppUI:
 
         ctk.CTkButton(self.settings_win, text="Save & Close", font=SUBHEADER_FONT, height=40, command=save_and_close).pack(pady=10)
 
-    def _on_quick_fallback_changed(self, selected: str) -> None:
-        """Immediately persist the quick-switcher selection to config and disk."""
+    def _on_quick_main_changed(self, selected: str) -> None:
+        """Persist main agent selection and sync with settings."""
+        config.model = selected
+        config.save_to_file()
+        if hasattr(self, "model_combo"):
+            try:
+                self.model_combo.set(selected)
+            except Exception:
+                pass
+
+    def _on_quick_fallback_free_changed(self, selected: str) -> None:
+        """Persist free fallback selection and clear paid dropdown."""
         config.fallback_model = "" if selected == "Disabled" else selected
         config.save_to_file()
-        # Keep settings window in sync if it's open
-        if hasattr(self, "fallback_combo"):
+        if selected != "Disabled":
+            self.quick_fallback_paid.set("Disabled")
+        self._sync_settings_fallback(selected)
+
+    def _on_quick_fallback_paid_changed(self, selected: str) -> None:
+        """Persist paid fallback selection and clear free dropdown."""
+        config.fallback_model = "" if selected == "Disabled" else selected
+        config.save_to_file()
+        if selected != "Disabled":
+            self.quick_fallback_free.set("Disabled")
+        self._sync_settings_fallback(selected)
+
+    def _sync_settings_fallback(self, selected: str) -> None:
+        if hasattr(self, "fallback_combo_free"):
             try:
-                self.fallback_combo.set(selected)
+                if selected in self.quick_fallback_free._values:
+                    self.fallback_combo_free.set(selected)
+                    self.fallback_combo_paid.set("Disabled")
+                elif selected in self.quick_fallback_paid._values:
+                    self.fallback_combo_paid.set(selected)
+                    self.fallback_combo_free.set("Disabled")
+                else:
+                    self.fallback_combo_free.set("Disabled")
+                    self.fallback_combo_paid.set("Disabled")
             except Exception:
                 pass
 
@@ -557,10 +669,11 @@ class AppUI:
         key_entries: dict[str, ctk.CTkEntry] = {}
 
         PROVIDER_LABELS = {
-            "GROQ_API_KEY":      ("Groq",     "Free: 14,400 req/day — groq.com/keys",        "#2ECC71"),
-            "GOOGLE_API_KEY":    ("Google",   "Free: 1,500 req/day — aistudio.google.com",   "#4285F4"),
-            "OPENAI_API_KEY":    ("OpenAI",   "Pay-as-you-go — platform.openai.com/api-keys","#10A37F"),
-            "ANTHROPIC_API_KEY": ("Anthropic","Pay-as-you-go — console.anthropic.com/keys",  "#D97757"),
+            "GROQ_API_KEY":       ("Groq",       "Free: 14,400 req/day — groq.com/keys",        "#2ECC71"),
+            "GOOGLE_API_KEY":     ("Google",     "Free: 1,500 req/day — aistudio.google.com",   "#4285F4"),
+            "OPENROUTER_API_KEY": ("OpenRouter", "Free limits & Pay-as-you-go — openrouter.ai", "#8B5CF6"),
+            "OPENAI_API_KEY":     ("OpenAI",     "Pay-as-you-go — platform.openai.com/api-keys","#10A37F"),
+            "ANTHROPIC_API_KEY":  ("Anthropic",  "Pay-as-you-go — console.anthropic.com/keys",  "#D97757"),
         }
 
         for key_name, models in key_groups.items():

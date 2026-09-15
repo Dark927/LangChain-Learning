@@ -21,80 +21,110 @@ class ProviderModel:
     model_id: str
     requires_key: str
     free_tier_note: str
+    is_free: bool = True
 
 
 class ProviderRegistry:
     """
     Central registry of all supported external LLM provider models.
-    Free-tier models reset daily or weekly and act as smart fallbacks.
     """
 
     ALL_MODELS: ClassVar[list[ProviderModel]] = [
         # ── Groq (free tier, resets daily) ──────────────────────────────────
         ProviderModel(
             provider_id="groq",
-            display_name="Groq — Llama 3.3 70B (Free)",
+            display_name="Groq — Llama 3.3 70B",
             model_id="llama-3.3-70b-versatile",
             requires_key="GROQ_API_KEY",
             free_tier_note="Free tier: ~14,400 req/day, resets daily",
+            is_free=True,
         ),
         ProviderModel(
             provider_id="groq",
-            display_name="Groq — Llama 3.1 8B (Free)",
+            display_name="Groq — Llama 3.1 8B",
             model_id="llama-3.1-8b-instant",
             requires_key="GROQ_API_KEY",
             free_tier_note="Free tier: fastest Groq model, resets daily",
+            is_free=True,
         ),
         ProviderModel(
             provider_id="groq",
-            display_name="Groq — Gemma 2 9B (Free)",
+            display_name="Groq — Gemma 2 9B",
             model_id="gemma2-9b-it",
             requires_key="GROQ_API_KEY",
             free_tier_note="Free tier: ~14,400 req/day, resets daily",
+            is_free=True,
         ),
         ProviderModel(
             provider_id="groq",
-            display_name="Groq — Mistral Saba (Free)",
+            display_name="Groq — Mistral Saba",
             model_id="mistral-saba-24b",
             requires_key="GROQ_API_KEY",
             free_tier_note="Free tier: ~14,400 req/day, resets daily",
+            is_free=True,
         ),
         ProviderModel(
             provider_id="groq",
-            display_name="Groq — DeepSeek R1 Distill 70B (Free)",
+            display_name="Groq — DeepSeek R1 70B",
             model_id="deepseek-r1-distill-llama-70b",
             requires_key="GROQ_API_KEY",
             free_tier_note="Free tier: reasoning model, resets daily",
+            is_free=True,
         ),
         # ── Google AI Studio (free tier, resets daily) ───────────────────────
         ProviderModel(
             provider_id="google_genai",
-            display_name="Google — Gemini 2.0 Flash (Free)",
+            display_name="Google — Gemini 2.0 Flash",
             model_id="gemini-2.0-flash",
             requires_key="GOOGLE_API_KEY",
             free_tier_note="Free tier: 1,500 req/day, resets daily",
+            is_free=True,
         ),
         ProviderModel(
             provider_id="google_genai",
-            display_name="Google — Gemini 2.5 Flash (Free)",
+            display_name="Google — Gemini 2.5 Flash",
             model_id="gemini-2.5-flash",
             requires_key="GOOGLE_API_KEY",
             free_tier_note="Free tier: 500 req/day, resets daily",
+            is_free=True,
         ),
         ProviderModel(
             provider_id="google_genai",
-            display_name="Google — Gemini 2.0 Flash Lite (Free)",
+            display_name="Google — Gemini 2.0 Flash Lite",
             model_id="gemini-2.0-flash-lite",
             requires_key="GOOGLE_API_KEY",
             free_tier_note="Free tier: 1,500 req/day, fastest Google model",
+            is_free=True,
         ),
-        # ── OpenAI (pay-as-you-go, very cheap) ──────────────────────────────
+        # ── OpenRouter (Free Tier) ──────────────────────────────────────────
+        ProviderModel(
+            provider_id="openrouter",
+            display_name="OpenRouter — Llama 3 8B (Free)",
+            model_id="meta-llama/llama-3-8b-instruct:free",
+            requires_key="OPENROUTER_API_KEY",
+            free_tier_note="Free models on OpenRouter, rate limits apply",
+            is_free=True,
+        ),
+        ProviderModel(
+            provider_id="openrouter",
+            display_name="OpenRouter — Gemini 2.0 Flash (Free)",
+            model_id="google/gemini-2.0-flash-lite-preview-02-05:free",
+            requires_key="OPENROUTER_API_KEY",
+            free_tier_note="Free models on OpenRouter, rate limits apply",
+            is_free=True,
+        ),
+        
+        # ====================================================================
+        # ── PAID MODELS ─────────────────────────────────────────────────────
+        # ====================================================================
+        
         ProviderModel(
             provider_id="openai",
             display_name="OpenAI — GPT-4o Mini",
             model_id="gpt-4o-mini",
             requires_key="OPENAI_API_KEY",
             free_tier_note="Pay-as-you-go (very cheap)",
+            is_free=False,
         ),
         ProviderModel(
             provider_id="openai",
@@ -102,16 +132,33 @@ class ProviderRegistry:
             model_id="gpt-4.1-nano",
             requires_key="OPENAI_API_KEY",
             free_tier_note="Pay-as-you-go (cheapest OpenAI model)",
+            is_free=False,
         ),
-        # ── Anthropic (pay-as-you-go, very cheap) ────────────────────────────
         ProviderModel(
             provider_id="anthropic",
             display_name="Anthropic — Claude Haiku 3.5",
             model_id="claude-haiku-4-5",
             requires_key="ANTHROPIC_API_KEY",
             free_tier_note="Pay-as-you-go (very cheap)",
+            is_free=False,
+        ),
+        ProviderModel(
+            provider_id="openrouter",
+            display_name="OpenRouter — Claude 3.5 Sonnet (Paid)",
+            model_id="anthropic/claude-3.5-sonnet",
+            requires_key="OPENROUTER_API_KEY",
+            free_tier_note="Pay-as-you-go OpenRouter routing",
+            is_free=False,
         ),
     ]
+
+    @classmethod
+    def get_free_models(cls) -> list[str]:
+        return [m.display_name for m in cls.ALL_MODELS if m.is_free]
+
+    @classmethod
+    def get_paid_models(cls) -> list[str]:
+        return [m.display_name for m in cls.ALL_MODELS if not m.is_free]
 
     @classmethod
     def get_by_display_name(cls, name: str) -> ProviderModel | None:
