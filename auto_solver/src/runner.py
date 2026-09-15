@@ -387,6 +387,11 @@ class Runner:
                         self.safe_sleep(0.5)
                     else:
                         self._log("Last answer is already near the top, no smart scroll needed.")
+                        
+                    if config.loop_delay > 0 and not self.stop_requested:
+                        self._set_status(f"Loop delay ({config.loop_delay}s)")
+                        self._log(f"Waiting {config.loop_delay} seconds before next scan...")
+                        if not self.safe_sleep(config.loop_delay): break
 
             except Exception as e:
                 self._log(f"Error in Google Forms loop: {e}", "red")

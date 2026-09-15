@@ -474,6 +474,13 @@ class AppUI:
         self.thinking_delay_entry.insert(0, str(config.thinking_delay))
         self.thinking_delay_entry.pack(side="right")
         
+        loop_delay_frame = ctk.CTkFrame(frame, fg_color="transparent")
+        loop_delay_frame.pack(fill="x", pady=5, padx=10)
+        ctk.CTkLabel(loop_delay_frame, text="Loop Delay (sec):", font=PRO_FONT).pack(side="left")
+        self.loop_delay_entry = ctk.CTkEntry(loop_delay_frame, width=80, justify="center", font=PRO_FONT)
+        self.loop_delay_entry.insert(0, str(config.loop_delay))
+        self.loop_delay_entry.pack(side="right")
+        
         scroll_frame = ctk.CTkFrame(frame, fg_color="transparent")
         scroll_frame.pack(fill="x", pady=5, padx=10)
         ctk.CTkLabel(scroll_frame, text="Scroll Amount (wheel notches):", font=PRO_FONT).pack(side="left")
@@ -545,6 +552,14 @@ class AppUI:
                 config.thinking_delay = delay_val
             except ValueError:
                 messagebox.showerror("Error", "Thinking Delay must be a positive number or 0.", parent=self.settings_win)
+                return
+
+            try:
+                loop_val = float(self.loop_delay_entry.get().strip())
+                if loop_val < 0: raise ValueError()
+                config.loop_delay = loop_val
+            except ValueError:
+                messagebox.showerror("Error", "Loop Delay must be a positive number or 0.", parent=self.settings_win)
                 return
                 
             try:
