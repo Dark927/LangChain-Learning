@@ -1,0 +1,53 @@
+[
+    {
+        "question_region": [
+            1729,
+            163,
+            1644,
+            977
+        ],
+        "click_sequence": [
+            {
+                "name": "Check answer",
+                "pos": [
+                    3239,
+                    1164
+                ],
+                "color": [
+                    252,
+                    251,
+                    254
+                ],
+                "check_color": false
+            },
+            {
+                "name": "Next",
+                "pos": [
+                    3251,
+                    1166
+                ],
+                "color": [
+                    251,
+                    249,
+                    253
+                ],
+                "check_color": false
+            }
+        ],
+        "thinking_delay": 0.0,
+        "loop_delay": 1.0,
+        "tesseract_path": "C:\\Program Files\\Tesseract-OCR\\tesseract.exe",
+        "ocr_language": "ukr+rus+eng",
+        "model": "Gemini 3.7 Flash (High)",
+        "work_mode": "Standard",
+        "scroll_amount": 5,
+        "show_step_timings": true,
+        "save_qa_logs": true,
+        "theme_color_primary": "#ff0de7",
+        "theme_color_hover": "#d80bc4",
+        "ctk_theme": "blue",
+        "appearance_mode": "System",
+        "preset_name": "Udemy p:RS s:75%",
+        "id": "bf522b52-8334-45f8-b124-0d57a6526e78"
+    }
+]

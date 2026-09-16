@@ -1,5 +1,5 @@
 import sys
-from ui import AppUI
+from ui.app import AppUI
 
 def setup_environment():
     if sys.platform == "win32":
@@ -14,7 +14,7 @@ def main():
     print("Initializing Auto Solver...")
     
     # 1. Check and perform Antigravity CLI Auth / Install
-    from auth_manager import AuthManager
+    from ui.auth_manager import AuthManager
     AuthManager.check_and_setup()
     
     # 2. Run Main UI Loop

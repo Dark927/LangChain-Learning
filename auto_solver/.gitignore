@@ -10,9 +10,12 @@ Output/
 *.spec
 
 # User Data and Logs
-data/app_settings.json
-data/logs_history.json
-data/qa_trace.log
+data/*.json
+!data/presets.json
+src/data/*.json
+!src/data/presets.json
+data/models/
+data/*.log
 *.log
 
 # Misc

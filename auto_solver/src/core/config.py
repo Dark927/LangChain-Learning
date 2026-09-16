@@ -25,6 +25,9 @@ class AppConfig:
     
     # Tesseract OCR language(s) — use '+' to combine, e.g. "ukr+rus+eng"
     ocr_language: str = "ukr+rus+eng"
+
+    # OCR Engine Mode: "Text Mode" (Tesseract) or "Math Mode" (Pix2Text)
+    ocr_mode: str = "Text Mode"
     
     # Model to use as the main agent
     model: str = "Antigravity — Gemini 3.7 Flash (High)"
@@ -52,12 +55,18 @@ class AppConfig:
     
     # "System", "Dark", "Light"
     appearance_mode: str = "System"
+    
+    # Saved Window Dimensions
+    window_geometry: str = "1100x650"
+
+    # Use locally installed models as a last-resort fallback when all API models fail
+    use_local_as_fallback: bool = True
 
 
 
     def _get_data_dir(self):
         import os, sys
-        base_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        base_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         return os.path.join(base_dir, "data")
 
     def save_to_file(self):
@@ -96,6 +105,13 @@ class AppConfig:
                         setattr(self, k, v)
             except Exception as e:
                 print(f"Failed to load settings: {e}")
+
+        # Resolve local portable Tesseract if it was shipped with the repack
+        import sys
+        base_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        local_tess = os.path.join(base_dir, "Tesseract-OCR", "tesseract.exe")
+        if os.path.exists(local_tess):
+            self.tesseract_path = local_tess
 
 config = AppConfig()
 config.load_from_file()

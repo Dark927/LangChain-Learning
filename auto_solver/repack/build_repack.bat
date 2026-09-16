@@ -6,7 +6,7 @@ echo ==============================================
 echo.
 
 echo [1/4] Installing/Verifying Python Dependencies...
-python -m pip install pyinstaller customtkinter pillow pyautogui pytesseract pyperclip cairosvg
+python -m pip install pyinstaller customtkinter pillow pyautogui pytesseract pyperclip cairosvg pix2text gpt4all
 
 echo.
 echo [2/4] Generating favicon.ico from logo.svg...
@@ -23,6 +23,16 @@ for /f "delims=" %%I in ('python -c "import sys, os; print(os.path.join(sys.base
 if exist "%PYTHON3_DLL%" (
     copy "%PYTHON3_DLL%" "dist\AutoSolverPro\_internal\" >nul
     echo Successfully patched missing Python DLL!
+)
+
+echo.
+echo [3.5/4] Bundling Tesseract OCR into Repack...
+if exist "C:\Program Files\Tesseract-OCR" (
+    xcopy "C:\Program Files\Tesseract-OCR" "dist\AutoSolverPro\Tesseract-OCR" /E /I /H /Y >nul
+    echo Successfully bundled local Tesseract-OCR into the Repack!
+) else (
+    echo WARNING: Tesseract-OCR not found in C:\Program Files\Tesseract-OCR.
+    echo The repack will not include Tesseract. Users will need to install it manually.
 )
 
 move AutoSolverPro.spec repack\ >nul 2>&1
