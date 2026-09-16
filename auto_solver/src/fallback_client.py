@@ -54,16 +54,51 @@ def _build_model(model_def: ProviderModel) -> tuple[ProviderModel, BaseChatModel
         return None
 
 
+# Track model health to avoid repeatedly hitting dead or rate-limited endpoints.
+# format: { display_name: {"status": "cooldown" | "dead", "counter": int} }
+MODEL_HEALTH: dict[str, dict] = {}
+
+COOLDOWN_QUESTIONS = 3
+
+def _update_health_on_error(display_name: str, error_msg: str, live_log_callback: Callable | None = None):
+    error_lower = error_msg.lower()
+    
+    # Permanent errors
+    if any(x in error_lower for x in ["401", "403", "404", "invalid api key", "expired", "not found", "unauthorized", "authentication"]):
+        MODEL_HEALTH[display_name] = {"status": "dead", "counter": 0}
+        if live_log_callback:
+            live_log_callback(f"[Circuit Breaker] {display_name} marked as permanently DEAD.")
+    else:
+        # Transient errors
+        MODEL_HEALTH[display_name] = {"status": "cooldown", "counter": COOLDOWN_QUESTIONS}
+        if live_log_callback:
+            live_log_callback(f"[Circuit Breaker] {display_name} marked for COOLDOWN.")
+
 def get_configured_fallback_models(selected_display_name: str | None) -> list[tuple[ProviderModel, BaseChatModel]]:
     """
     Build a list of all configured fallback models.
     The user-selected model is placed first. All remaining configured models follow.
+    Filters out models that are currently dead or on cooldown.
     """
     primary_def = ProviderRegistry.get_by_display_name(selected_display_name or "")
     models: list[tuple[ProviderModel, BaseChatModel]] = []
 
+    # Helper to check health
+    def _is_healthy(disp_name: str) -> bool:
+        health = MODEL_HEALTH.get(disp_name)
+        if health:
+            if health["status"] == "dead":
+                return False
+            if health["status"] == "cooldown":
+                if health["counter"] > 0:
+                    health["counter"] -= 1
+                    return False
+                else:
+                    del MODEL_HEALTH[disp_name]
+        return True
+
     # Build primary first if selected and has a key
-    if primary_def:
+    if primary_def and _is_healthy(primary_def.display_name):
         built = _build_model(primary_def)
         if built:
             models.append(built)
@@ -72,6 +107,9 @@ def get_configured_fallback_models(selected_display_name: str | None) -> list[tu
     for model_def in ProviderRegistry.ALL_MODELS:
         if primary_def and model_def.display_name == primary_def.display_name:
             continue
+        if not _is_healthy(model_def.display_name):
+            continue
+            
         built = _build_model(model_def)
         if built:
             models.append(built)
@@ -137,9 +175,12 @@ def ask_fallback(
             return text.strip()
             
         except Exception as e:
+            err_msg_full = str(e)
             if live_log_callback:
-                err_msg = str(e).split('\n')[0][:50]
+                err_msg = err_msg_full.split('\n')[0][:50]
                 live_log_callback(f"[Fallback] {model_def.provider_id} failed ({err_msg})...")
+            
+            _update_health_on_error(model_def.display_name, err_msg_full, live_log_callback)
             continue
 
     if live_log_callback:

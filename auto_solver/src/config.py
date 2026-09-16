@@ -26,8 +26,8 @@ class AppConfig:
     # Tesseract OCR language(s) — use '+' to combine, e.g. "ukr+rus+eng"
     ocr_language: str = "ukr+rus+eng"
     
-    # Model to use in Antigravity CLI
-    model: str = "Gemini 3.7 Flash (High)"
+    # Model to use as the main agent
+    model: str = "Antigravity — Gemini 3.7 Flash (High)"
     
     # Work mode: "Standard" or "Google Forms"
     work_mode: str = "Standard"
@@ -53,8 +53,7 @@ class AppConfig:
     # "System", "Dark", "Light"
     appearance_mode: str = "System"
 
-    # Display name of the selected external fallback LLM model (empty = disabled)
-    fallback_model: str = ""
+
 
     def _get_data_dir(self):
         import os, sys

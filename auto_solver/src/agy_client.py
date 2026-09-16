@@ -90,13 +90,18 @@ def ask_agent(question_text: str, check_abort=None, live_log_callback=None) -> s
         "NO explanation. NO extra words. Just the answer text.\n\n"
         f"{question_text}"
     )
-    result = _run_agy(prompt, check_abort, live_log_callback)
-
-    if not result and config.fallback_model:
-        if live_log_callback:
-            live_log_callback("[Agent] No answer from Antigravity — trying fallback model...")
+    result = None
+    if config.model.startswith("Antigravity —"):
+        result = _run_agy(prompt, check_abort, live_log_callback)
+        if not result:
+            if live_log_callback:
+                live_log_callback("[Agent] Main Agent failed — starting fallback cascade...")
+            from fallback_client import ask_fallback
+            result = ask_fallback(prompt, None, live_log_callback)
+    else:
+        # Universal API Key Model
         from fallback_client import ask_fallback
-        result = ask_fallback(prompt, config.fallback_model, live_log_callback)
+        result = ask_fallback(prompt, config.model, live_log_callback)
 
     return result
 
@@ -143,13 +148,17 @@ def ask_agent_google_forms_batch(
         f"Screen text:\n{trimmed}"
     )
 
-    reply = _run_agy(prompt, check_abort, live_log_callback)
-
-    if not reply and config.fallback_model:
-        if live_log_callback:
-            live_log_callback("[Agent] No answer from Antigravity — trying fallback model...")
+    reply = None
+    if config.model.startswith("Antigravity —"):
+        reply = _run_agy(prompt, check_abort, live_log_callback)
+        if not reply:
+            if live_log_callback:
+                live_log_callback("[Agent] Main Agent failed — starting fallback cascade...")
+            from fallback_client import ask_fallback
+            reply = ask_fallback(prompt, None, live_log_callback)
+    else:
         from fallback_client import ask_fallback
-        reply = ask_fallback(prompt, config.fallback_model, live_log_callback)
+        reply = ask_fallback(prompt, config.model, live_log_callback)
 
     if not reply:
         return None
