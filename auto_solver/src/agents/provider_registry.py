@@ -186,14 +186,16 @@ class ProviderRegistry:
                 r = requests.get('https://api.groq.com/openai/v1/models', headers={'Authorization': f'Bearer {groq_key}'}, timeout=10)
                 if r.status_code == 200:
                     for m in r.json().get('data', []):
-                        if 'whisper' not in m['id']:
-                            dynamic_list.append({
-                                "provider_id": "groq",
-                                "display_name": f"Groq — {m['id']}",
-                                "model_id": m['id'],
-                                "requires_key": "GROQ_API_KEY",
-                                "is_free": True
-                            })
+                        mid = m['id'].lower()
+                        if any(x in mid for x in ['llama', 'gemma', 'mistral', 'deepseek', 'qwen', 'gpt-oss', 'mixtral']):
+                            if 'guard' not in mid:
+                                dynamic_list.append({
+                                    "provider_id": "groq",
+                                    "display_name": f"Groq — {m['id']}",
+                                    "model_id": m['id'],
+                                    "requires_key": "GROQ_API_KEY",
+                                    "is_free": True
+                                })
             except Exception:
                 pass
                 
@@ -204,17 +206,20 @@ class ProviderRegistry:
                 r = requests.get('https://openrouter.ai/api/v1/models', timeout=10)
                 if r.status_code == 200:
                     for m in r.json().get('data', []):
-                        # Only add free models to not overwhelm the UI
-                        if m.get('pricing', {}).get('prompt', '0') == '0' or ':free' in m['id'] or 'llama' in m['id'].lower() or 'claude' in m['id'].lower() or 'gemini' in m['id'].lower() or 'gpt' in m['id'].lower():
-                            is_free = (m.get('pricing', {}).get('prompt', '0') == '0' or ':free' in m['id'])
-                            name = m.get('name', m['id'])
-                            dynamic_list.append({
-                                "provider_id": "openrouter",
-                                "display_name": f"OR — {name}"[:50],
-                                "model_id": m['id'],
-                                "requires_key": "OPENROUTER_API_KEY",
-                                "is_free": is_free
-                            })
+                        # Strict free tier check
+                        is_free = (m.get('pricing', {}).get('prompt', '0') == '0' and m.get('pricing', {}).get('completion', '0') == '0') or ':free' in m['id'].lower()
+                        if is_free:
+                            mid = m['id'].lower()
+                            # Exclude moderation/embeddings/agents, keep only pure text LLMs
+                            if 'moderation' not in mid and 'embed' not in mid:
+                                name = m.get('name', m['id'])
+                                dynamic_list.append({
+                                    "provider_id": "openrouter",
+                                    "display_name": f"OR — {name}"[:50],
+                                    "model_id": m['id'],
+                                    "requires_key": "OPENROUTER_API_KEY",
+                                    "is_free": True
+                                })
             except Exception:
                 pass
 
@@ -234,14 +239,23 @@ class ProviderRegistry:
             with open(DYNAMIC_MODELS_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
             
+            # Load dead models to avoid importing known bad models
+            dead = set()
+            try:
+                base_dir = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                dead_path = os.path.join(base_dir, "data", "dead_models.json")
+                if os.path.exists(dead_path):
+                    with open(dead_path, "r", encoding="utf-8") as f:
+                        dead = set(json.load(f))
+            except: pass
+
             # Remove previously loaded dynamic models (to avoid duplicates on refresh)
-            # We keep only the hardcoded ones
-            # Actually, just rebuild ALL_MODELS. Wait, ALL_MODELS has the hardcoded ones.
-            # Instead of modifying ALL_MODELS directly each time, let's just clear dynamic ones.
             cls.ALL_MODELS = [m for m in cls.ALL_MODELS if not getattr(m, "_is_dynamic", False)]
             
             for d in data:
-                # Deduplicate by model_id
+                # Deduplicate by model_id and skip permanently dead models
+                if d['display_name'] in dead:
+                    continue
                 if not any(m.model_id == d['model_id'] and m.provider_id == d['provider_id'] for m in cls.ALL_MODELS):
                     pm = ProviderModel(
                         provider_id=d['provider_id'],

@@ -12,7 +12,7 @@ from langchain.chat_models import init_chat_model
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage
 
-from provider_registry import ProviderModel, ProviderRegistry, get_key
+from agents.provider_registry import ProviderModel, ProviderRegistry, get_key
 
 # Maximum characters sent to the fallback model to avoid burning tokens
 _FALLBACK_MAX_CHARS: int = 3000
@@ -54,25 +54,54 @@ def _build_model(model_def: ProviderModel) -> tuple[ProviderModel, BaseChatModel
         return None
 
 
+def _get_dead_models_path() -> str:
+    import os, sys
+    base_dir = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base_dir, "data", "dead_models.json")
+
+def _load_dead_models() -> set:
+    import json, os
+    path = _get_dead_models_path()
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return set(json.load(f))
+        except:
+            pass
+    return set()
+
+def _add_dead_model(display_name: str):
+    import json, os
+    dead = _load_dead_models()
+    if display_name not in dead:
+        dead.add(display_name)
+        path = _get_dead_models_path()
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(list(dead), f, indent=4)
+
 # Track model health to avoid repeatedly hitting dead or rate-limited endpoints.
 # format: { display_name: {"status": "cooldown" | "dead", "counter": int} }
-MODEL_HEALTH: dict[str, dict] = {}
+MODEL_HEALTH: dict[str, dict] = {name: {"status": "dead", "counter": 0} for name in _load_dead_models()}
 
 COOLDOWN_QUESTIONS = 3
 
 def _update_health_on_error(display_name: str, error_msg: str, live_log_callback: Callable | None = None):
     error_lower = error_msg.lower()
-    
-    # Permanent errors
-    if any(x in error_lower for x in ["401", "403", "404", "invalid api key", "expired", "not found", "unauthorized", "authentication"]):
+
+    # Permanent errors (or standard "bad request" errors that indicate model decommission)
+    if any(x in error_lower for x in ["401", "403", "404", "400", "invalid api key", "expired", "not found", "unauthorized", "authentication"]):
         MODEL_HEALTH[display_name] = {"status": "dead", "counter": 0}
+        _add_dead_model(display_name)
         if live_log_callback:
-            live_log_callback(f"[Circuit Breaker] {display_name} marked as permanently DEAD.")
+            clean_name = display_name.split("—")[-1].replace("(Free)", "").strip()
+            live_log_callback(f"[Circuit Breaker] {clean_name} marked as permanently DEAD.")
     else:
         # Transient errors
         MODEL_HEALTH[display_name] = {"status": "cooldown", "counter": COOLDOWN_QUESTIONS}
         if live_log_callback:
-            live_log_callback(f"[Circuit Breaker] {display_name} marked for COOLDOWN.")
+            clean_name = display_name.split("—")[-1].replace("(Free)", "").strip()
+            live_log_callback(f"[Circuit Breaker] {clean_name} marked for COOLDOWN.")
 
 def get_configured_fallback_models(selected_display_name: str | None) -> list[tuple[ProviderModel, BaseChatModel]]:
     """
@@ -94,26 +123,40 @@ def get_configured_fallback_models(selected_display_name: str | None) -> list[tu
                     health["counter"] -= 1
                     return False
                 else:
-                    del MODEL_HEALTH[disp_name]
+                    health["status"] = "recovered"
+                    return True
         return True
 
-    # Build primary first if selected and has a key
-    if primary_def and _is_healthy(primary_def.display_name):
-        built = _build_model(primary_def)
-        if built:
-            models.append(built)
+    pristine_models = []
+    recovered_models = []
 
-    # Build all other configured models as fallbacks
+    # Helper to check and categorize
+    def _add_model_if_healthy(m_def: ProviderModel):
+        if not _is_healthy(m_def.display_name):
+            return
+        if not get_key(m_def.requires_key):
+            return
+        built = _build_model(m_def)
+        if not built:
+            return
+            
+        h_status = MODEL_HEALTH.get(m_def.display_name, {}).get("status")
+        if h_status == "recovered":
+            recovered_models.append(built)
+        else:
+            pristine_models.append(built)
+
+    # Add primary first if selected
+    if primary_def:
+        _add_model_if_healthy(primary_def)
+    
     for model_def in ProviderRegistry.ALL_MODELS:
         if primary_def and model_def.display_name == primary_def.display_name:
             continue
-        if not _is_healthy(model_def.display_name):
-            continue
-            
-        built = _build_model(model_def)
-        if built:
-            models.append(built)
-
+        _add_model_if_healthy(model_def)
+                
+    models.extend(pristine_models)
+    models.extend(recovered_models)
     return models
 
 
@@ -121,6 +164,7 @@ def ask_fallback(
     prompt: str,
     selected_model_name: str | None,
     live_log_callback: Callable[[str], None] | None = None,
+    check_abort: Callable[[], bool] | None = None
 ) -> str:
     """
     Send a prompt to the fallback LLMs. Automatically switches to the next available model if one fails.
@@ -148,9 +192,20 @@ def ask_fallback(
                 
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(_invoke)
-                try:
-                    response = future.result(timeout=20)
-                except concurrent.futures.TimeoutError:
+                waited = 0.0
+                response = None
+                while waited < 20.0:
+                    if check_abort and check_abort():
+                        if live_log_callback:
+                            live_log_callback("[Fallback] Aborted by user.")
+                        return ""
+                    try:
+                        response = future.result(timeout=0.2)
+                        break
+                    except concurrent.futures.TimeoutError:
+                        waited += 0.2
+                        
+                if response is None:
                     raise TimeoutError(f"Model {model_def.provider_id} timed out after 20 seconds")
                     
             text = response.content if hasattr(response, "content") else str(response)
