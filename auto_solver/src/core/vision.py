@@ -2,7 +2,7 @@ import mss
 from PIL import Image
 import pytesseract
 from typing import Dict, List, Tuple, Optional
-from config import config
+from core.config import config
 import difflib
 import re
 
@@ -44,6 +44,43 @@ class VisionHandler:
             img = ImageEnhance.Contrast(img).enhance(2.0)
             custom_config = r'--psm 11' # Sparse text mode is much better for finding buttons in large areas
 
+        full_text_words = []
+        word_boxes = []
+
+        if config.ocr_mode == "Math Mode" and not is_button:
+            try:
+                from pix2text import Pix2Text
+                # Initialize once globally to avoid reloading models
+                if not hasattr(self, "_p2t_instance"):
+                    self._p2t_instance = Pix2Text(analyzer_config={'languages': ('en', 'ru')})
+                
+                # Pix2Text prefers RGB images
+                img_rgb = img.convert('RGB') if img.mode != 'RGB' else img
+                res = self._p2t_instance.recognize(img_rgb, return_text=False)
+                
+                for item in res:
+                    text = item.get("text", "").strip()
+                    if text:
+                        full_text_words.append(text)
+                        pos = item.get("position", [])
+                        if len(pos) == 4:
+                            left = int(min(p[0] for p in pos) / scale_factor)
+                            top = int(min(p[1] for p in pos) / scale_factor)
+                            right = int(max(p[0] for p in pos) / scale_factor)
+                            bottom = int(max(p[1] for p in pos) / scale_factor)
+                            word_boxes.append({
+                                "text": text,
+                                "left": left,
+                                "top": top,
+                                "width": right - left,
+                                "height": bottom - top
+                            })
+                return " ".join(full_text_words), word_boxes
+            except ImportError:
+                print("Pix2Text not installed, falling back to Tesseract.")
+            except Exception as e:
+                print(f"Pix2Text error: {e}, falling back to Tesseract.")
+
         try:
             # Refresh path from config in case user changed it after init
             pytesseract.pytesseract.tesseract_cmd = config.tesseract_path
@@ -55,10 +92,7 @@ class VisionHandler:
             )
         except FileNotFoundError:
             raise RuntimeError(f"Tesseract executable not found at {config.tesseract_path}. Please install Tesseract OCR and update the path in config.py if necessary.")
-            
-        full_text_words = []
-        word_boxes = []
-        
+
         n_boxes = len(data['text'])
         for i in range(n_boxes):
             text = data['text'][i].strip()

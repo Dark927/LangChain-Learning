@@ -3,9 +3,9 @@ import pyautogui
 from pynput import keyboard
 import threading
 from typing import Tuple, Callable, Optional
-from config import config
-from vision import VisionHandler
-from agy_client import ask_agent, ask_agent_google_forms_batch
+from core.config import config
+from core.vision import VisionHandler
+from agents.agy_client import ask_agent, ask_agent_google_forms_batch
 import logging
 import os
 
@@ -106,8 +106,13 @@ class Runner:
         self.is_running = True
         self.stop_requested = False
         self.is_paused = False
+        session_start_time = time.time()
         self._log("Automation started. Press F8 to Pause/Resume. Press ESC to Stop.")
         self._set_status("Started")
+        
+        last_screen_text = ""
+        failed_answers = []
+        last_clicked_answer = None
         
         while self.is_running and not self.stop_requested:
             if self.is_paused:
@@ -131,16 +136,37 @@ class Runner:
                     if not self.safe_sleep(1): break
                     continue
                     
+                import difflib
+                import re
+                
+                # Compute both char ratio and word Jaccard to be extremely robust against OCR noise
+                char_sim = difflib.SequenceMatcher(None, text.strip(), last_screen_text).ratio()
+                words1 = set(re.findall(r'\w+', text.lower()))
+                words2 = set(re.findall(r'\w+', last_screen_text.lower()))
+                word_sim = len(words1.intersection(words2)) / len(words1.union(words2)) if words1 or words2 else 0.0
+                
+                similarity = max(char_sim, word_sim)
+
+                if similarity > 0.50:
+                    if last_clicked_answer and last_clicked_answer not in failed_answers:
+                        failed_answers.append(last_clicked_answer)
+                        self._log(f"Detected same question (similarity {similarity:.2f} > 0.50). Marking '{last_clicked_answer}' as WRONG.", "yellow")
+                        self._log(f"Current known wrong answers ({len(failed_answers)}): {failed_answers}", "yellow")
+                else:
+                    last_screen_text = text.strip()
+                    failed_answers = []
+                    last_clicked_answer = None
+
                 qa_logger.info(f"QUESTION EXTRACTED:\n{text.strip()}")
                     
                 # 3. Ask Agent
                 self._set_status("Asking AI")
-                self._log("Asking Antigravity...", "green")
+                self._log(f"Asking {config.model}...", "green")
                 
                 def agent_live_log(msg):
                     self._log(f"  [AI] {msg}", "gray")
                     
-                answer_text = ask_agent(text, lambda: self.stop_requested, agent_live_log)
+                answer_text = ask_agent(text, lambda: self.stop_requested, agent_live_log, failed_answers=failed_answers)
 
                 if self.stop_requested:
                     break
@@ -168,6 +194,7 @@ class Runner:
                 self._log(f"Clicking answer at {click_point}...", "yellow")
                 pyautogui.moveTo(*click_point, duration=0.2)
                 pyautogui.click()
+                last_clicked_answer = answer_text
                 
                 if not self.safe_sleep(0.2): break
                 
@@ -228,7 +255,16 @@ class Runner:
                 if not self.safe_sleep(1): break
                 
         self._set_status("Stopped")
-        self._log("Automation stopped.")
+        elapsed = time.time() - session_start_time
+        mins, secs = divmod(elapsed, 60)
+        self._log(f"Automation stopped. Total time: {int(mins)}m {secs:.1f}s")
+        
+        self.is_running = False
+        self.stop_requested = False
+        self.is_paused = False
+        self._set_status("Idle")
+        if self.on_finish_callback:
+            self.on_finish_callback()
 
     def _scroll_down(self, clicks: int) -> None:
         """Scrolls the mouse wheel down by the given number of clicks inside the question region."""
@@ -253,6 +289,7 @@ class Runner:
         self.qa_log = []
         answered_questions: list[str] = []
         last_screen_text = ""
+        session_start_time = time.time()
 
         self._log("Google Forms Automation started. Press F8 to Pause/Resume. Press ESC to Stop.")
         self._set_status("Started")
@@ -310,6 +347,11 @@ class Runner:
 
                 self._log(f"Batch: {len(qa_pairs)} question(s) to answer.")
 
+                # Append immediately to ensure they are saved in history even if the user aborts before clicks
+                for q, a in qa_pairs:
+                    if not any(entry["question"] == q and entry["answer"] == a for entry in self.qa_log):
+                        self.qa_log.append({"question": q, "answer": a})
+
                 # === STEP 3: Click every answer ===
                 region_bottom = config.question_region[1] + config.question_region[3]
                 safety_threshold = region_bottom - int(config.question_region[3] * 0.15)
@@ -358,11 +400,11 @@ class Runner:
                                 self._log("  Answer lost after scroll! Using last known position.", "red")
                                 # Fall through to click the original point just in case
 
+                        if self.stop_requested: break
                         self._set_status("Clicking answer")
                         self._log(f"  Clicking at {click_point}...", "yellow")
                         pyautogui.moveTo(*click_point, duration=0.1)
                         pyautogui.click()
-                        self.qa_log.append({"question": q, "answer": a})
                         clicked = True
                         last_click_y = click_point[1]
                         break
@@ -398,14 +440,20 @@ class Runner:
                 if not self.safe_sleep(1): break
 
         self._set_status("Stopped")
-        self._log("Google Forms Automation stopped.")
+        elapsed = time.time() - session_start_time
+        mins, secs = divmod(elapsed, 60)
+        self._log(f"Google Forms Automation stopped. Total time: {int(mins)}m {secs:.1f}s")
+
+        # Reset stop flag so final log formatting proceeds even if loop was aborted
+        # (User can press ESC again to cancel formatting if desired)
+        self.stop_requested = False
         
         if config.save_qa_logs and self.qa_log:
             self._set_status("Formatting Final Log")
             self._log("Sending final QA log to AI for cleanup and title generation...", "blue")
             try:
-                from agy_client import format_qa_log
-                import history_manager
+                from agents.agy_client import format_qa_log
+                import core.history_manager as history_manager
                 
                 def fmt_log_cb(msg):
                     self._log(f"  [AI] {msg}", "gray")
@@ -426,6 +474,9 @@ class Runner:
             except Exception as e:
                 self._log(f"Failed to format/save log: {e}", "red")
         
+        self.is_running = False
+        self.stop_requested = False
+        self.is_paused = False
         self._set_status("Idle")
         if self.on_finish_callback:
             self.on_finish_callback()
