@@ -20,8 +20,10 @@ class ProviderModel:
     display_name: str
     model_id: str
     requires_key: str
-    free_tier_note: str
+    free_tier_note: str = ""
     is_free: bool = True
+
+DYNAMIC_MODELS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "dynamic_models.json")
 
 
 class ProviderRegistry:
@@ -169,6 +171,91 @@ class ProviderRegistry:
     def display_names(cls) -> list[str]:
         """Return all display names for populating UI dropdowns."""
         return [m.display_name for m in cls.ALL_MODELS]
+
+    @classmethod
+    def update_dynamic_models(cls) -> int:
+        """Fetch models from connected APIs and save them to disk."""
+        import requests
+        
+        dynamic_list = []
+        
+        # 1. Groq
+        groq_key = get_key('GROQ_API_KEY')
+        if groq_key:
+            try:
+                r = requests.get('https://api.groq.com/openai/v1/models', headers={'Authorization': f'Bearer {groq_key}'}, timeout=10)
+                if r.status_code == 200:
+                    for m in r.json().get('data', []):
+                        if 'whisper' not in m['id']:
+                            dynamic_list.append({
+                                "provider_id": "groq",
+                                "display_name": f"Groq — {m['id']}",
+                                "model_id": m['id'],
+                                "requires_key": "GROQ_API_KEY",
+                                "is_free": True
+                            })
+            except Exception:
+                pass
+                
+        # 2. OpenRouter
+        or_key = get_key('OPENROUTER_API_KEY')
+        if or_key:
+            try:
+                r = requests.get('https://openrouter.ai/api/v1/models', timeout=10)
+                if r.status_code == 200:
+                    for m in r.json().get('data', []):
+                        # Only add free models to not overwhelm the UI
+                        if m.get('pricing', {}).get('prompt', '0') == '0' or ':free' in m['id'] or 'llama' in m['id'].lower() or 'claude' in m['id'].lower() or 'gemini' in m['id'].lower() or 'gpt' in m['id'].lower():
+                            is_free = (m.get('pricing', {}).get('prompt', '0') == '0' or ':free' in m['id'])
+                            name = m.get('name', m['id'])
+                            dynamic_list.append({
+                                "provider_id": "openrouter",
+                                "display_name": f"OR — {name}"[:50],
+                                "model_id": m['id'],
+                                "requires_key": "OPENROUTER_API_KEY",
+                                "is_free": is_free
+                            })
+            except Exception:
+                pass
+
+        if dynamic_list:
+            os.makedirs(os.path.dirname(DYNAMIC_MODELS_FILE), exist_ok=True)
+            with open(DYNAMIC_MODELS_FILE, "w", encoding="utf-8") as f:
+                json.dump(dynamic_list, f, indent=4)
+            cls._load_dynamic_models()
+            return len(dynamic_list)
+        return 0
+
+    @classmethod
+    def _load_dynamic_models(cls):
+        if not os.path.exists(DYNAMIC_MODELS_FILE):
+            return
+        try:
+            with open(DYNAMIC_MODELS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            
+            # Remove previously loaded dynamic models (to avoid duplicates on refresh)
+            # We keep only the hardcoded ones
+            # Actually, just rebuild ALL_MODELS. Wait, ALL_MODELS has the hardcoded ones.
+            # Instead of modifying ALL_MODELS directly each time, let's just clear dynamic ones.
+            cls.ALL_MODELS = [m for m in cls.ALL_MODELS if not getattr(m, "_is_dynamic", False)]
+            
+            for d in data:
+                # Deduplicate by model_id
+                if not any(m.model_id == d['model_id'] and m.provider_id == d['provider_id'] for m in cls.ALL_MODELS):
+                    pm = ProviderModel(
+                        provider_id=d['provider_id'],
+                        display_name=d['display_name'],
+                        model_id=d['model_id'],
+                        requires_key=d['requires_key'],
+                        is_free=d.get('is_free', False)
+                    )
+                    pm._is_dynamic = True
+                    cls.ALL_MODELS.append(pm)
+        except Exception:
+            pass
+
+ProviderRegistry._load_dynamic_models()
 
 
 def _get_keys_path() -> str:

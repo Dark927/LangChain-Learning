@@ -16,6 +16,21 @@ PRO_FONT = ("Segoe UI", 13)
 HEADER_FONT = ("Segoe UI", 22, "bold")
 SUBHEADER_FONT = ("Segoe UI", 14, "bold")
 
+def get_antigravity_models():
+    import os, json
+    path = os.path.join(config._get_data_dir(), "agy_models.json")
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            pass
+    return [
+        "Antigravity — Gemini 3.8 Flash (High)", "Antigravity — Gemini 3.8 Flash (Medium)", "Antigravity — Gemini 3.8 Flash (Low)",
+        "Antigravity — Gemini 3.7 Flash (High)", "Antigravity — Gemini 3.7 Flash (Medium)", "Antigravity — Gemini 3.6 Flash (High)",
+        "Antigravity — Gemini 3.5 Flash (High)", "Antigravity — Gemini 3.1 Pro (High)", "Antigravity — Claude Sonnet 4.6 (Thinking)", "Antigravity — GPT-OSS 120B (Medium)"
+    ]
+
 class SelectionOverlay:
     def __init__(self, master, on_selected):
         self.master = master
@@ -212,10 +227,7 @@ class AppUI:
         quick_frame_main.pack(fill="x", padx=40, pady=(15, 0))
         ctk.CTkLabel(quick_frame_main, text="Main Agent:", font=PRO_FONT, text_color="gray", width=95, anchor="w").pack(side="left", padx=(0, 6))
         
-        antigravity_models = [
-            "Antigravity — Gemini 3.7 Flash (High)", "Antigravity — Gemini 3.7 Flash (Medium)", "Antigravity — Gemini 3.6 Flash (High)",
-            "Antigravity — Gemini 3.5 Flash (High)", "Antigravity — Gemini 3.1 Pro (High)", "Antigravity — Claude Sonnet 4.6 (Thinking)", "Antigravity — GPT-OSS 120B (Medium)"
-        ]
+        antigravity_models = get_antigravity_models()
         
         from provider_registry import ProviderRegistry, get_key
         api_models = [m.display_name for m in ProviderRegistry.ALL_MODELS if get_key(m.requires_key)]
@@ -387,10 +399,7 @@ class AppUI:
         model_inner = ctk.CTkFrame(frame, fg_color="transparent")
         model_inner.pack(fill="x", padx=10, pady=5)
         
-        antigravity_models = [
-            "Antigravity — Gemini 3.7 Flash (High)", "Antigravity — Gemini 3.7 Flash (Medium)", "Antigravity — Gemini 3.6 Flash (High)",
-            "Antigravity — Gemini 3.5 Flash (High)", "Antigravity — Gemini 3.1 Pro (High)", "Antigravity — Claude Sonnet 4.6 (Thinking)", "Antigravity — GPT-OSS 120B (Medium)"
-        ]
+        antigravity_models = get_antigravity_models()
         from provider_registry import ProviderRegistry, get_key
         api_models = [m.display_name for m in ProviderRegistry.ALL_MODELS if get_key(m.requires_key)]
         
@@ -401,7 +410,38 @@ class AppUI:
         ctk.CTkButton(model_inner, text="View Quota", command=self.check_quota, width=80, font=PRO_FONT).pack(side="left")
         ctk.CTkButton(model_inner, text="Change Account", command=self.change_account, width=100, font=PRO_FONT, fg_color="#C0392B", hover_color="#922B21").pack(side="right", padx=(5, 0))
 
-        ctk.CTkButton(frame, text="⚙  Configure API Keys", command=self.open_api_keys_window, font=PRO_FONT, height=32).pack(fill="x", padx=10, pady=(0, 10))
+        def update_models():
+            import subprocess, json, threading
+            from provider_registry import ProviderRegistry
+            
+            def _run_update():
+                # 1. Update Antigravity models
+                try:
+                    creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+                    out = subprocess.run(['agy', 'models'], capture_output=True, text=True, timeout=10, creationflags=creationflags).stdout
+                    new_agy = []
+                    for line in out.splitlines():
+                        if '\t' in line:
+                            parts = line.split('\t')
+                            new_agy.append(f"Antigravity — {parts[1].strip()}")
+                    if new_agy:
+                        path = os.path.join(config._get_data_dir(), "agy_models.json")
+                        os.makedirs(os.path.dirname(path), exist_ok=True)
+                        with open(path, "w", encoding="utf-8") as f:
+                            json.dump(new_agy, f)
+                except Exception:
+                    pass
+                    
+                # 2. Update external APIs
+                ProviderRegistry.update_dynamic_models()
+                
+                # 3. Notify
+                self.settings_win.after(0, lambda: messagebox.showinfo("Success", "Models updated! Please restart the settings window to see them.", parent=self.settings_win))
+                
+            threading.Thread(target=_run_update, daemon=True).start()
+
+        ctk.CTkButton(frame, text="⚙  Configure API Keys", command=self.open_api_keys_window, font=PRO_FONT, height=32).pack(fill="x", padx=10, pady=(0, 5))
+        ctk.CTkButton(frame, text="🔄  Update Available Models", command=update_models, font=PRO_FONT, height=32).pack(fill="x", padx=10, pady=(0, 10))
 
         # Engine Config
         ctk.CTkLabel(frame, text="Engine Configuration", font=SUBHEADER_FONT).pack(pady=(15, 5))
@@ -730,6 +770,54 @@ class AppUI:
                             self.root.after(0, ask_code)
                 
                 result = "".join(output_lines).strip()
+                
+                # --- INJECT API CHECKS ---
+                api_status = "\n\n=== External API Status ===\n"
+                import requests
+                from provider_registry import get_key
+                
+                groq_key = get_key('GROQ_API_KEY')
+                if groq_key:
+                    try:
+                        r = requests.get('https://api.groq.com/openai/v1/models', headers={'Authorization': f'Bearer {groq_key}'}, timeout=5)
+                        if r.status_code == 200:
+                            api_status += f"✅ Groq: Connected (Available models: {len(r.json().get('data', []))})\n"
+                        else:
+                            api_status += f"❌ Groq: Error {r.status_code}\n"
+                    except:
+                        api_status += f"❌ Groq: Connection failed\n"
+                        
+                or_key = get_key('OPENROUTER_API_KEY')
+                if or_key:
+                    try:
+                        r = requests.get('https://openrouter.ai/api/v1/auth/key', headers={'Authorization': f'Bearer {or_key}'}, timeout=5)
+                        if r.status_code == 200:
+                            data = r.json().get('data', {})
+                            free_req = data.get('free_model_daily_requests', {})
+                            if free_req:
+                                rem = free_req.get('remaining', '?')
+                                lim = free_req.get('limit', '?')
+                                api_status += f"✅ OpenRouter: Connected (Free daily reqs: {rem}/{lim})\n"
+                            else:
+                                api_status += f"✅ OpenRouter: Connected\n"
+                        else:
+                            api_status += f"❌ OpenRouter: Error {r.status_code}\n"
+                    except:
+                        api_status += f"❌ OpenRouter: Connection failed\n"
+                        
+                google_key = get_key('GOOGLE_API_KEY')
+                if google_key:
+                    try:
+                        r = requests.get(f'https://generativelanguage.googleapis.com/v1beta/models?key={google_key}', timeout=5)
+                        if r.status_code == 200:
+                            api_status += f"✅ Google GenAI: Connected\n"
+                        else:
+                            api_status += f"❌ Google GenAI: Error {r.status_code}\n"
+                    except:
+                        api_status += f"❌ Google GenAI: Connection failed\n"
+
+                result += api_status
+                
                 if process.returncode == 0:
                     self.root.after(0, self.show_quota_dashboard, result)
                 else:
