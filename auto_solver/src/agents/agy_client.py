@@ -198,36 +198,46 @@ def _mask_failed_options(question_text: str, failed_answers: list[str]) -> str:
     """
     Physically replaces the text of known wrong answers from the question block
     so the model cannot possibly select or read them.
+    Handles mangled OCR blobs without newlines via robust regex chunking.
     """
     if not failed_answers:
         return question_text
-        
+
     import difflib
     
-    lines = question_text.split('\n')
-    filtered_lines = []
+    parts = re.split(r'(\n|\s{2,}|(?<=[.?])\s+)', question_text)
+    masked_parts = []
     
-    for line in lines:
-        is_wrong = False
-        line_clean = line.strip().lower()
-        if len(line_clean) > 3:
-            for fa in failed_answers:
-                fa_clean = fa.strip().lower()
-                
-                char_sim = difflib.SequenceMatcher(None, fa_clean, line_clean).ratio()
-                
-                words1 = set(re.findall(r'\w+', line_clean))
-                words2 = set(re.findall(r'\w+', fa_clean))
-                word_sim = len(words1.intersection(words2)) / len(words1.union(words2)) if words1 or words2 else 0.0
-                
-                if max(char_sim, word_sim) > 0.50 or fa_clean in line_clean or line_clean in fa_clean:
-                    is_wrong = True
-                    break
-        
-        if not is_wrong:
-            filtered_lines.append(line)
+    for i, part in enumerate(parts):
+        if i % 2 == 1:
+            masked_parts.append(part) # separator
+            continue
             
-    return '\n'.join(filtered_lines)
+        c_clean = part.strip().lower()
+        if len(c_clean) < 5 or c_clean.startswith("question"):
+            masked_parts.append(part)
+            continue
+            
+        is_wrong = False
+        for fa in failed_answers:
+            fa_clean = fa.strip().lower()
+            
+            char_sim = difflib.SequenceMatcher(None, fa_clean, c_clean).ratio()
+            
+            words1 = set(re.findall(r'\w+', c_clean))
+            words2 = set(re.findall(r'\w+', fa_clean))
+            word_sim = len(words1.intersection(words2)) / len(words1.union(words2)) if words1 or words2 else 0.0
+            
+            if max(char_sim, word_sim) > 0.50 or fa_clean in c_clean or c_clean in fa_clean:
+                is_wrong = True
+                break
+                
+        if is_wrong:
+            masked_parts.append('[REMOVED - INCORRECT OPTION]')
+        else:
+            masked_parts.append(part)
+            
+    return ''.join(masked_parts)
 
 
 def _run_local_model(prompt: str, live_log_callback=None, max_tokens: int = 120, system_prompt: str = None) -> str:
