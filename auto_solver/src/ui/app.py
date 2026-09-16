@@ -5,8 +5,8 @@ import pyautogui
 import threading
 import csv
 import time
-from config import config
-from runner import Runner
+from core.config import config
+from core.runner import Runner
 
 # Professional Business Theme Setup
 ctk.set_appearance_mode("System")
@@ -16,20 +16,32 @@ PRO_FONT = ("Segoe UI", 13)
 HEADER_FONT = ("Segoe UI", 22, "bold")
 SUBHEADER_FONT = ("Segoe UI", 14, "bold")
 
+def filter_dead_models(models_list):
+    import os, json
+    dead_path = os.path.join(config._get_data_dir(), "dead_models.json")
+    if os.path.exists(dead_path):
+        try:
+            with open(dead_path, "r", encoding="utf-8") as f:
+                dead = set(json.load(f))
+            return [m for m in models_list if m not in dead]
+        except: pass
+    return models_list
+
 def get_antigravity_models():
     import os, json
+
     path = os.path.join(config._get_data_dir(), "agy_models.json")
     if os.path.exists(path):
         try:
             with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
+                return filter_dead_models(json.load(f))
         except:
             pass
-    return [
-        "Antigravity — Gemini 3.8 Flash (High)", "Antigravity — Gemini 3.8 Flash (Medium)", "Antigravity — Gemini 3.8 Flash (Low)",
-        "Antigravity — Gemini 3.7 Flash (High)", "Antigravity — Gemini 3.7 Flash (Medium)", "Antigravity — Gemini 3.6 Flash (High)",
-        "Antigravity — Gemini 3.5 Flash (High)", "Antigravity — Gemini 3.1 Pro (High)", "Antigravity — Claude Sonnet 4.6 (Thinking)", "Antigravity — GPT-OSS 120B (Medium)"
-    ]
+    return filter_dead_models([
+        "Antigravity — Gemini 3.8 Flash (High)", "Antigravity — Gemini 3.7 Flash (High)", 
+        "Antigravity — Gemini 3.6 Flash (High)", "Antigravity — Gemini 3.5 Flash (High)", 
+        "Antigravity — Gemini 3.1 Pro (High)", "Antigravity — Claude Sonnet 4.6 (Thinking)"
+    ])
 
 class SelectionOverlay:
     def __init__(self, master, on_selected):
@@ -97,12 +109,39 @@ class AppUI:
         self.runner.on_log_callback = self.on_runner_log
         self.runner.on_status_callback = self.on_runner_status
         
+        # --- Main Layout Split ---
+        self.main_container = ctk.CTkFrame(self.root, fg_color="transparent")
+        self.main_container.pack(fill="both", expand=True)
+        self.left_panel = ctk.CTkFrame(self.main_container, fg_color="transparent", width=450)
+        self.left_panel.pack(side="left", fill="y", padx=10, pady=10)
+        self.left_panel.pack_propagate(False) # Keep fixed width
+        self.right_panel = ctk.CTkFrame(self.main_container, fg_color="transparent")
+        self.right_panel.pack(side="right", fill="both", expand=True, padx=(0, 10), pady=10)
+
         # Header
-        self.header = ctk.CTkLabel(self.root, text="Auto Solver Pro", font=HEADER_FONT)
+        self.header = ctk.CTkLabel(self.left_panel, text="Auto Solver Pro", font=HEADER_FONT)
         self.header.pack(pady=(15, 5))
+        
+        # Current Setup Summary (Hideable)
+        self.summary_visible = False
+        self.summary_btn = ctk.CTkButton(self.left_panel, text="View Current Setup ▼", command=self.toggle_setup_summary, fg_color="transparent", text_color=("gray30", "gray70"), hover_color=("gray85", "gray25"), font=PRO_FONT, width=150, height=20)
+        self.summary_btn.pack(pady=(0, 5))
+        
+        self.summary_frame = ctk.CTkFrame(self.left_panel, corner_radius=6)
+        self.summary_lbl = ctk.CTkLabel(self.summary_frame, text="", font=("Consolas", 11), justify="left")
+        self.summary_lbl.pack(padx=10, pady=10, fill="both", expand=True)
+        # Initially hidden
+        
+        # OCR Engine Selection
+        ocr_mode_frame = ctk.CTkFrame(self.left_panel, fg_color="transparent")
+        ocr_mode_frame.pack(fill="x", padx=20, pady=(5, 5))
+        ctk.CTkLabel(ocr_mode_frame, text="OCR Engine:", font=SUBHEADER_FONT).pack(side="left")
+        self.main_ocr_mode_combo = ctk.CTkOptionMenu(ocr_mode_frame, values=["Text Mode (Fast)", "Math Mode (Pix2Text)"], command=self.on_ocr_mode_changed, font=PRO_FONT)
+        self.main_ocr_mode_combo.set("Math Mode (Pix2Text)" if config.ocr_mode == "Math Mode" else "Text Mode (Fast)")
+        self.main_ocr_mode_combo.pack(side="right", fill="x", expand=True, padx=(10, 0))
 
         # Work Mode Selection
-        mode_frame = ctk.CTkFrame(self.root, fg_color="transparent")
+        mode_frame = ctk.CTkFrame(self.left_panel, fg_color="transparent")
         mode_frame.pack(fill="x", padx=20, pady=5)
         ctk.CTkLabel(mode_frame, text="Work Mode:", font=SUBHEADER_FONT).pack(side="left")
         self.mode_combo = ctk.CTkOptionMenu(mode_frame, command=self.on_mode_changed, font=PRO_FONT)
@@ -110,7 +149,7 @@ class AppUI:
         self.refresh_mode_combo(current_selection=config.work_mode)
         
         # --- Targeting Section (Always Visible) ---
-        target_frame = ctk.CTkFrame(self.root, corner_radius=6)
+        target_frame = ctk.CTkFrame(self.left_panel, corner_radius=6)
         target_frame.pack(fill="x", pady=10, padx=20)
         
         self.region_lbl = ctk.CTkLabel(target_frame, text="Question Region: Not Set", font=PRO_FONT)
@@ -127,6 +166,8 @@ class AppUI:
         # File Menu
         file_menu = tk.Menu(self.menubar, tearoff=0)
         file_menu.add_command(label="View Logs History", command=self.open_history_window)
+        file_menu.add_separator()
+        file_menu.add_command(label="Reset Window Size", command=self.reset_window_size)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self.root.quit)
         self.menubar.add_cascade(label="File", menu=file_menu)
@@ -150,7 +191,7 @@ class AppUI:
         self.menubar.add_cascade(label="Preferences", menu=pref_menu)
         
         # --- Live Log Panel (Always visible below target frame/preferences) ---
-        self.log_header_frame = ctk.CTkFrame(self.root, fg_color="transparent")
+        self.log_header_frame = ctk.CTkFrame(self.right_panel, fg_color="transparent")
         self.log_header_frame.pack(fill="x", padx=20, pady=(10, 0))
         
         self.status_lbl = ctk.CTkLabel(self.log_header_frame, text="Status: 🛑 Idle", font=PRO_FONT)
@@ -178,7 +219,7 @@ class AppUI:
                                             command=self.copy_logs)
         self.copy_log_btn.pack(side="right", padx=(0, 5))
         
-        self.log_frame = ctk.CTkFrame(self.root, corner_radius=6)
+        self.log_frame = ctk.CTkFrame(self.right_panel, corner_radius=6)
         self.log_frame.pack(fill="both", expand=True, pady=(0, 10), padx=20)
         
         self.log_font_size = 12
@@ -216,40 +257,48 @@ class AppUI:
         self._animate_status()
         
         # --- Footer ---
-        self.info_lbl = ctk.CTkLabel(self.root, text="F8 = Pause/Resume  |  ESC = Stop", font=PRO_FONT, text_color="gray")
+        self.info_lbl = ctk.CTkLabel(self.left_panel, text="F8 = Pause/Resume  |  ESC = Stop", font=PRO_FONT, text_color="gray")
         self.info_lbl.pack(pady=(10, 5))
         
         # --- Quick AI Model Switchers ---
-        from provider_registry import ProviderRegistry
+        from agents.provider_registry import ProviderRegistry
         
         # Main Agent Dropdown
-        quick_frame_main = ctk.CTkFrame(self.root, fg_color="transparent")
+        quick_frame_main = ctk.CTkFrame(self.left_panel, fg_color="transparent")
         quick_frame_main.pack(fill="x", padx=40, pady=(15, 0))
         ctk.CTkLabel(quick_frame_main, text="Main Agent:", font=PRO_FONT, text_color="gray", width=95, anchor="w").pack(side="left", padx=(0, 6))
         
         antigravity_models = get_antigravity_models()
         
-        from provider_registry import ProviderRegistry, get_key
-        api_models = [m.display_name for m in ProviderRegistry.ALL_MODELS if get_key(m.requires_key)]
+        from agents.provider_registry import ProviderRegistry, get_key
+        api_models = filter_dead_models([m.display_name for m in ProviderRegistry.ALL_MODELS if get_key(m.requires_key)])
         
-        main_options = antigravity_models + api_models
+        # Local Models Integration
+        from agents.local_models import get_installed_models
+        local_models = [f"Local: {m['name']}" for m in get_installed_models()]
         
-        if config.model and not config.model.startswith("Antigravity —") and config.model not in api_models:
+        main_options = antigravity_models + api_models + local_models
+        
+        if config.model and not config.model.startswith("Antigravity —") and config.model not in api_models and not config.model.startswith("Local: "):
             config.model = f"Antigravity — {config.model}"
             
         self.quick_main_combo = ctk.CTkOptionMenu(
-            quick_frame_main, values=main_options, dynamic_resizing=False, font=PRO_FONT, width=220,
+            quick_frame_main, values=main_options, dynamic_resizing=False, font=PRO_FONT, width=190,
             command=self._on_quick_main_changed
         )
         self.quick_main_combo.set(config.model)
         self.quick_main_combo.pack(side="left", fill="x", expand=True)
+        
+        self.local_models_btn = ctk.CTkButton(quick_frame_main, text="+ Local", width=60, font=PRO_FONT, fg_color="#3b82f6", hover_color="#2563eb", command=self.open_local_models_window)
+        self.local_models_btn.pack(side="left", padx=(10, 0))
 
-        self.start_btn = ctk.CTkButton(self.root, text="Start Automation", font=SUBHEADER_FONT,
+        self.start_btn = ctk.CTkButton(self.left_panel, text="Start Automation", font=SUBHEADER_FONT,
             height=45, corner_radius=6, command=self.start_automation)
         self.start_btn.pack(pady=(6, 10), padx=40, fill="x")
         
-        # Open with a spacious default size
-        self.root.geometry("480x730")
+        # Open with saved or default size
+        geom = getattr(config, "window_geometry", "1100x650")
+        self.root.geometry(geom)
         
         # Apply initial layout and color theme based on config
         self.on_mode_changed(config.work_mode)
@@ -257,12 +306,43 @@ class AppUI:
         # Lock minimum size to prevent clipping bottom elements (UI + ~100px log box)
         self.root.update_idletasks()
         self.root.wm_minsize(self.root.winfo_reqwidth(), self.root.winfo_reqheight())
-        
+
+        self.update_setup_summary()
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+
+    def on_ocr_mode_changed(self, new_val: str):
+        config.ocr_mode = "Math Mode" if "Math" in new_val else "Text Mode"
+        config.save_to_file()
+        self.update_setup_summary()
+
+    def toggle_setup_summary(self):
+        self.summary_visible = not self.summary_visible
+        if self.summary_visible:
+            self.summary_btn.configure(text="Hide Setup Summary ▲")
+            self.summary_frame.pack(after=self.summary_btn, padx=20, pady=5, fill="x")
+            self.update_setup_summary()
+        else:
+            self.summary_btn.configure(text="View Current Setup ▼")
+            self.summary_frame.pack_forget()
+
+    def update_setup_summary(self):
+        txt = (
+            f"Work Mode : {config.work_mode}\n"
+            f"OCR Engine: {config.ocr_mode}\n"
+            f"Main Agent: {config.model}\n"
+            f"Think Time: {config.thinking_delay}s | Loop Delay: {config.loop_delay}s\n"
+            f"Scroll Amt: {config.scroll_amount} notches"
+        )
+        self.summary_lbl.configure(text=txt)
 
     def on_close(self):
         """Save settings and completely shut down the application."""
-        from config import config
+        from core.config import config
+        # Save window geometry
+        try:
+            config.window_geometry = self.root.geometry()
+        except Exception:
+            pass
         config.save_to_file()
         self.is_animating = False
         if hasattr(self, 'runner') and self.runner and getattr(self.runner, 'is_running', False):
@@ -272,6 +352,13 @@ class AppUI:
             self.root.destroy()
         except Exception:
             pass
+            
+    def reset_window_size(self):
+        """Resets the main window dimensions to the default side-by-side layout size."""
+        self.root.geometry("1100x650")
+        from core.config import config
+        config.window_geometry = "1100x650"
+        config.save_to_file()
 
     def on_log_zoom(self, event):
         if event.delta > 0:
@@ -400,10 +487,12 @@ class AppUI:
         model_inner.pack(fill="x", padx=10, pady=5)
         
         antigravity_models = get_antigravity_models()
-        from provider_registry import ProviderRegistry, get_key
-        api_models = [m.display_name for m in ProviderRegistry.ALL_MODELS if get_key(m.requires_key)]
+        from agents.provider_registry import ProviderRegistry, get_key
+        api_models = filter_dead_models([m.display_name for m in ProviderRegistry.ALL_MODELS if get_key(m.requires_key)])
         
-        self.model_combo = ctk.CTkOptionMenu(model_inner, values=antigravity_models + api_models, dynamic_resizing=False, font=PRO_FONT)
+        from agents.local_models import get_installed_models as _get_local
+        _local_opts = [f"Local: {m['name']}" for m in _get_local()]
+        self.model_combo = ctk.CTkOptionMenu(model_inner, values=antigravity_models + api_models + _local_opts, dynamic_resizing=False, font=PRO_FONT)
         self.model_combo.set(config.model)
         self.model_combo.pack(side="left", fill="x", expand=True, padx=(0, 10))
         
@@ -412,7 +501,7 @@ class AppUI:
 
         def update_models():
             import subprocess, json, threading
-            from provider_registry import ProviderRegistry
+            from agents.provider_registry import ProviderRegistry
             
             def _run_update():
                 # 1. Update Antigravity models
@@ -423,7 +512,9 @@ class AppUI:
                     for line in out.splitlines():
                         if '\t' in line:
                             parts = line.split('\t')
-                            new_agy.append(f"Antigravity — {parts[1].strip()}")
+                            name = parts[1].strip()
+                            if "(Medium)" not in name and "(Low)" not in name:
+                                new_agy.append(f"Antigravity — {name}")
                     if new_agy:
                         path = os.path.join(config._get_data_dir(), "agy_models.json")
                         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -466,6 +557,7 @@ class AppUI:
         self.scroll_amount_entry = ctk.CTkEntry(scroll_frame, width=80, justify="center", font=PRO_FONT)
         self.scroll_amount_entry.insert(0, str(config.scroll_amount))
         self.scroll_amount_entry.pack(side="right")
+        
 
         ocr_lang_frame = ctk.CTkFrame(frame, fg_color="transparent")
         ocr_lang_frame.pack(fill="x", pady=5, padx=10)
@@ -487,7 +579,11 @@ class AppUI:
         
         self.save_logs_var = ctk.BooleanVar(value=config.save_qa_logs)
         self.save_logs_cb = ctk.CTkCheckBox(frame, text="Enable AI Cleanup & Save Final QA Logs", variable=self.save_logs_var, font=PRO_FONT)
-        self.save_logs_cb.pack(fill="x", pady=(5, 15), padx=10)
+        self.save_logs_cb.pack(fill="x", pady=(5, 5), padx=10)
+
+        self.local_fallback_var = ctk.BooleanVar(value=config.use_local_as_fallback)
+        self.local_fallback_cb = ctk.CTkCheckBox(frame, text="Use Local Models as Last-Resort Fallback", variable=self.local_fallback_var, font=PRO_FONT)
+        self.local_fallback_cb.pack(fill="x", pady=(5, 15), padx=10)
         
         # Appearance Options
         ctk.CTkLabel(frame, text="Global Appearance & Theme", font=SUBHEADER_FONT).pack(pady=(15, 5))
@@ -555,6 +651,7 @@ class AppUI:
             self.quick_main_combo.set(config.model)
             config.show_step_timings = self.timings_var.get()
             config.save_qa_logs = self.save_logs_var.get()
+            config.use_local_as_fallback = self.local_fallback_var.get()
             
             # Apply Appearance
             config.appearance_mode = self.app_mode_combo.get()
@@ -568,7 +665,8 @@ class AppUI:
             
             # Save all global settings to disk
             config.save_to_file()
-            
+            self.update_setup_summary()
+
             self.settings_win.destroy()
             
             if config.ctk_theme != current_ctk_theme:
@@ -604,6 +702,7 @@ class AppUI:
         """Persist main agent selection and sync with settings."""
         config.model = selected
         config.save_to_file()
+        self.update_setup_summary()
         if hasattr(self, "model_combo"):
             try:
                 self.model_combo.set(selected)
@@ -625,7 +724,7 @@ class AppUI:
         Opens a polished, user-friendly API Keys configuration panel.
         Groups keys by provider with masked input fields, test buttons, and free-tier info.
         """
-        from provider_registry import ProviderRegistry, load_api_keys, save_api_keys
+        from agents.provider_registry import ProviderRegistry, load_api_keys, save_api_keys
 
         win = ctk.CTkToplevel(self.root)
         win.title("API Keys — External AI Providers")
@@ -774,7 +873,7 @@ class AppUI:
                 # --- INJECT API CHECKS ---
                 api_status = "\n\n=== External API Status ===\n"
                 import requests
-                from provider_registry import get_key
+                from agents.provider_registry import get_key
                 
                 groq_key = get_key('GROQ_API_KEY')
                 if groq_key:
@@ -1003,7 +1102,7 @@ class AppUI:
         self.render_sequence_ui()
 
     def refresh_mode_combo(self, current_selection=None):
-        import preset_manager
+        import core.preset_manager as preset_manager
         presets = preset_manager.load_presets()
         values = ["Standard", "Google Forms"] + [p["preset_name"] for p in presets]
         self.mode_combo.configure(values=values)
@@ -1011,6 +1110,7 @@ class AppUI:
             self.mode_combo.set(current_selection)
 
     def on_mode_changed(self, new_val):
+        self.update_setup_summary()
         if new_val in ["Standard", "Google Forms"]:
             config.work_mode = new_val
             # Reset colors to defaults for built-in modes
@@ -1022,7 +1122,7 @@ class AppUI:
                 config.theme_color_primary = "#a855f7"
                 config.theme_color_hover = "#9333ea"
         else:
-            import preset_manager
+            import core.preset_manager as preset_manager
             presets = preset_manager.load_presets()
             preset = next((p for p in presets if p["preset_name"] == new_val), None)
             if preset:
@@ -1084,7 +1184,7 @@ class AppUI:
 
     def open_save_preset_window(self):
         import dataclasses
-        import preset_manager
+        import core.preset_manager as preset_manager
         
         win = ctk.CTkToplevel(self.root)
         win.title("Save Preset")
@@ -1175,7 +1275,7 @@ class AppUI:
         ctk.CTkButton(win, text="Save Preset", command=save, font=PRO_FONT).pack(pady=20)
 
     def open_presets_dashboard(self):
-        import preset_manager
+        import core.preset_manager as preset_manager
         from tkinter import filedialog
         
         win = ctk.CTkToplevel(self.root)
@@ -1345,7 +1445,7 @@ class AppUI:
             self.history_win.focus()
             return
             
-        import history_manager
+        import core.history_manager as history_manager
         
         self.history_win = ctk.CTkToplevel(self.root)
         self.history_win.title("Logs History")
@@ -1462,3 +1562,30 @@ class AppUI:
             ctk.CTkLabel(frame, text=f"A: {a}", font=PRO_FONT, text_color="#10b981", justify="left", wraplength=550).pack(anchor="w", padx=10, pady=(0, 10))
             
         ctk.CTkButton(dashboard, text="Close", command=dashboard.destroy, font=PRO_FONT).pack(pady=10)
+
+    def open_local_models_window(self):
+        from ui.local_models_ui import LocalModelsWindow
+        def _on_update():
+            self.refresh_quick_main_combo()
+        LocalModelsWindow(self.root, on_update_callback=_on_update)
+
+    def open_local_models_window(self):
+        from ui.local_models_ui import LocalModelsWindow
+        def _on_update():
+            self.refresh_quick_main_combo()
+        LocalModelsWindow(self.root, on_update_callback=_on_update)
+
+    def refresh_quick_main_combo(self):
+        from agents.provider_registry import ProviderRegistry, get_key
+        from agents.local_models import get_installed_models
+        from core.config import config
+        antigravity_models = get_antigravity_models()
+        api_models = filter_dead_models([m.display_name for m in ProviderRegistry.ALL_MODELS if get_key(m.requires_key)])
+        local_models = [f"Local: {m['name']}" for m in get_installed_models()]
+        main_options = antigravity_models + api_models + local_models
+        self.quick_main_combo.configure(values=main_options)
+        if config.model not in main_options:
+            if main_options:
+                config.model = main_options[0]
+                self.quick_main_combo.set(config.model)
+                config.save_to_file()

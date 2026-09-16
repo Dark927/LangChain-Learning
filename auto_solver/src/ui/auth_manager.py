@@ -13,8 +13,8 @@ AGY_DOWNLOAD_URL = "https://example.com/agy-latest.zip"
 class AuthManager:
     @staticmethod
     def check_and_setup():
-        # Create a hidden root window just for message boxes before main UI starts
-        temp_root = ctk.CTk()
+        # Create a hidden standard Tk root to avoid CustomTkinter "after" script errors on rapid destroy
+        temp_root = tk.Tk()
         temp_root.withdraw()
         
         if not AuthManager.is_agy_installed():
