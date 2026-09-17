@@ -1216,9 +1216,7 @@ class AppUI:
                     return
         
         if self.runner.is_running:
-            self.runner.is_running = False
-            self.start_btn.configure(text="Start Automation")
-            self._apply_theme_colors()
+            self.stop_automation()
             return
             
         self.start_btn.configure(text="Stop Automation", fg_color="#ef4444", hover_color="#b91c1c")
@@ -1231,6 +1229,13 @@ class AppUI:
         # Run in background thread
         self.runner_thread = threading.Thread(target=self.run_wrapper, daemon=True)
         self.runner_thread.start()
+
+    def stop_automation(self):
+        """Safely stops the automation and resets the UI button."""
+        if hasattr(self, 'runner') and self.runner:
+            self.runner.is_running = False
+        self.start_btn.configure(text="Start Automation")
+        self._apply_theme_colors()
         
     def run_wrapper(self):
         self.runner.run_loop()

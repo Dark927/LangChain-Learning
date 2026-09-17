@@ -190,23 +190,27 @@ def ask_fallback(
             def _invoke():
                 return model_client.invoke([HumanMessage(content=trimmed_prompt)])
                 
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(_invoke)
-                waited = 0.0
-                response = None
-                while waited < 20.0:
-                    if check_abort and check_abort():
-                        if live_log_callback:
-                            live_log_callback("[Fallback] Aborted by user.")
-                        return ""
-                    try:
-                        response = future.result(timeout=0.2)
-                        break
-                    except concurrent.futures.TimeoutError:
-                        waited += 0.2
-                        
-                if response is None:
-                    raise TimeoutError(f"Model {model_def.provider_id} timed out after 20 seconds")
+            executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+            future = executor.submit(_invoke)
+            waited = 0.0
+            response = None
+            while waited < 20.0:
+                if check_abort and check_abort():
+                    if live_log_callback:
+                        live_log_callback("[Fallback] Aborted by user.")
+                    executor.shutdown(wait=False)
+                    return ""
+                try:
+                    response = future.result(timeout=0.2)
+                    break
+                except concurrent.futures.TimeoutError:
+                    waited += 0.2
+                    
+            if response is None:
+                executor.shutdown(wait=False)
+                raise TimeoutError(f"Model {model_def.provider_id} timed out after 20 seconds")
+            
+            executor.shutdown(wait=False)
                     
             text = response.content if hasattr(response, "content") else str(response)
             
