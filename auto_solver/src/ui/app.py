@@ -195,19 +195,7 @@ class AppUI:
         ctk.CTkCheckBox(lang_frame, text="RUS", variable=self.lang_rus_var, command=update_ocr_lang, font=PRO_FONT, width=60).pack(side="left", padx=5)
         ctk.CTkCheckBox(lang_frame, text="UKR", variable=self.lang_ukr_var, command=update_ocr_lang, font=PRO_FONT, width=60).pack(side="left", padx=5)
 
-        # OCR Recovery
-        rec_frame = ctk.CTkFrame(self.left_panel, fg_color="transparent")
-        rec_frame.pack(fill="x", padx=20, pady=(0, 10))
-        
-        def update_ocr_rec():
-            config.enable_ocr_recovery = self.ocr_recovery_var.get()
-            config.save_to_file()
-            self.update_setup_summary()
-            
-        self.ocr_recovery_var = ctk.BooleanVar(value=getattr(config, 'enable_ocr_recovery', False))
-        self.ocr_recovery_cb = ctk.CTkCheckBox(rec_frame, text="Enable AI OCR Recovery", variable=self.ocr_recovery_var, command=update_ocr_rec, font=PRO_FONT)
-        self.ocr_recovery_cb.pack(side="left")
-        ToolTip(self.ocr_recovery_cb, "Intercepts mangled screen text (e.g. c4r) and uses your\nselected AI to perfectly fix typos before answering.\nMay increase processing time per question.")
+
         
         # --- Targeting Section (Always Visible) ---
         target_frame = ctk.CTkFrame(self.left_panel, corner_radius=6)
@@ -648,6 +636,11 @@ class AppUI:
         self.local_fallback_cb = ctk.CTkCheckBox(frame, text="Use Local Models as Last-Resort Fallback", variable=self.local_fallback_var, font=PRO_FONT)
         self.local_fallback_cb.pack(fill="x", pady=(5, 5), padx=10)
         
+        self.ocr_recovery_var = ctk.BooleanVar(value=getattr(config, 'enable_ocr_recovery', False))
+        self.ocr_recovery_cb = ctk.CTkCheckBox(frame, text="Enable AI OCR Recovery", variable=self.ocr_recovery_var, font=PRO_FONT)
+        self.ocr_recovery_cb.pack(fill="x", pady=(5, 15), padx=10)
+        ToolTip(self.ocr_recovery_cb, "Intercepts mangled screen text (e.g. c4r) and uses your\nselected AI to perfectly fix typos before answering.\nMay increase processing time per question.")
+        
         
         # Appearance Options
         ctk.CTkLabel(frame, text="Global Appearance & Theme", font=SUBHEADER_FONT).pack(pady=(15, 5))
@@ -715,6 +708,7 @@ class AppUI:
             config.show_step_timings = self.timings_var.get()
             config.save_qa_logs = self.save_logs_var.get()
             config.use_local_as_fallback = self.local_fallback_var.get()
+            config.enable_ocr_recovery = self.ocr_recovery_var.get()
             
             # Apply Appearance
             config.appearance_mode = self.app_mode_combo.get()

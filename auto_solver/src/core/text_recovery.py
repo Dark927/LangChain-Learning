@@ -44,5 +44,5 @@ def recover_ocr_text_ai(text: str, log_cb, stop_check) -> str:
         return text
         
     # Sometimes models prepend "Here is the cleaned text:"
-    clean_result = re.sub(r'^(?i)(here is the|cleaned|fixed).*?:\s*', '', result).strip()
+    clean_result = re.sub(r'(?i)^(here is the|cleaned|fixed).*?:\s*', '', result).strip()
     return clean_result
