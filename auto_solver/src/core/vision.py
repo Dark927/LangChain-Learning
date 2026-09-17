@@ -52,7 +52,12 @@ class VisionHandler:
                 from pix2text import Pix2Text
                 # Initialize once globally to avoid reloading models
                 if not hasattr(self, "_p2t_instance"):
-                    self._p2t_instance = Pix2Text(analyzer_config={'languages': ('en', 'ru')})
+                    p2t_langs = []
+                    if 'eng' in config.ocr_language: p2t_langs.append('en')
+                    if 'rus' in config.ocr_language: p2t_langs.append('ru')
+                    # Pix2Text/CnOCR primarily targets en/ru/ch, fallback to 'en' if neither
+                    if not p2t_langs: p2t_langs = ['en']
+                    self._p2t_instance = Pix2Text(analyzer_config={'languages': tuple(p2t_langs)})
                 
                 # Pix2Text prefers RGB images
                 img_rgb = img.convert('RGB') if img.mode != 'RGB' else img

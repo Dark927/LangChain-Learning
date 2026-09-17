@@ -158,6 +158,14 @@ class AppUI:
         self.summary_lbl.pack(padx=10, pady=10, fill="both", expand=True)
         # Initially hidden
         
+        # Work Mode Selection
+        mode_frame = ctk.CTkFrame(self.left_panel, fg_color="transparent")
+        mode_frame.pack(fill="x", padx=20, pady=(10, 5))
+        ctk.CTkLabel(mode_frame, text="Work Mode:", font=SUBHEADER_FONT).pack(side="left")
+        self.mode_combo = ctk.CTkOptionMenu(mode_frame, command=self.on_mode_changed, font=PRO_FONT)
+        self.mode_combo.pack(side="right", fill="x", expand=True, padx=(10, 0))
+        self.refresh_mode_combo(current_selection=config.work_mode)
+
         # OCR Engine Selection
         ocr_mode_frame = ctk.CTkFrame(self.left_panel, fg_color="transparent")
         ocr_mode_frame.pack(fill="x", padx=20, pady=(5, 5))
@@ -166,13 +174,40 @@ class AppUI:
         self.main_ocr_mode_combo.set("Math Mode (Pix2Text)" if config.ocr_mode == "Math Mode" else "Text Mode (Fast)")
         self.main_ocr_mode_combo.pack(side="right", fill="x", expand=True, padx=(10, 0))
 
-        # Work Mode Selection
-        mode_frame = ctk.CTkFrame(self.left_panel, fg_color="transparent")
-        mode_frame.pack(fill="x", padx=20, pady=5)
-        ctk.CTkLabel(mode_frame, text="Work Mode:", font=SUBHEADER_FONT).pack(side="left")
-        self.mode_combo = ctk.CTkOptionMenu(mode_frame, command=self.on_mode_changed, font=PRO_FONT)
-        self.mode_combo.pack(side="right", fill="x", expand=True, padx=(10, 0))
-        self.refresh_mode_combo(current_selection=config.work_mode)
+        # OCR Languages
+        lang_frame = ctk.CTkFrame(self.left_panel, fg_color="transparent")
+        lang_frame.pack(fill="x", padx=20, pady=(0, 5))
+        
+        self.lang_eng_var = ctk.BooleanVar(value="eng" in config.ocr_language)
+        self.lang_rus_var = ctk.BooleanVar(value="rus" in config.ocr_language)
+        self.lang_ukr_var = ctk.BooleanVar(value="ukr" in config.ocr_language)
+        
+        def update_ocr_lang():
+            langs = []
+            if self.lang_ukr_var.get(): langs.append("ukr")
+            if self.lang_rus_var.get(): langs.append("rus")
+            if self.lang_eng_var.get(): langs.append("eng")
+            config.ocr_language = "+".join(langs) if langs else "eng"
+            config.save_to_file()
+            self.update_setup_summary()
+
+        ctk.CTkCheckBox(lang_frame, text="ENG", variable=self.lang_eng_var, command=update_ocr_lang, font=PRO_FONT, width=60).pack(side="left", padx=(0, 5))
+        ctk.CTkCheckBox(lang_frame, text="RUS", variable=self.lang_rus_var, command=update_ocr_lang, font=PRO_FONT, width=60).pack(side="left", padx=5)
+        ctk.CTkCheckBox(lang_frame, text="UKR", variable=self.lang_ukr_var, command=update_ocr_lang, font=PRO_FONT, width=60).pack(side="left", padx=5)
+
+        # OCR Recovery
+        rec_frame = ctk.CTkFrame(self.left_panel, fg_color="transparent")
+        rec_frame.pack(fill="x", padx=20, pady=(0, 10))
+        
+        def update_ocr_rec():
+            config.enable_ocr_recovery = self.ocr_recovery_var.get()
+            config.save_to_file()
+            self.update_setup_summary()
+            
+        self.ocr_recovery_var = ctk.BooleanVar(value=getattr(config, 'enable_ocr_recovery', False))
+        self.ocr_recovery_cb = ctk.CTkCheckBox(rec_frame, text="Enable AI OCR Recovery", variable=self.ocr_recovery_var, command=update_ocr_rec, font=PRO_FONT)
+        self.ocr_recovery_cb.pack(side="left")
+        ToolTip(self.ocr_recovery_cb, "Intercepts mangled screen text (e.g. c4r) and uses your\nselected AI to perfectly fix typos before answering.\nMay increase processing time per question.")
         
         # --- Targeting Section (Always Visible) ---
         target_frame = ctk.CTkFrame(self.left_panel, corner_radius=6)
@@ -355,6 +390,8 @@ class AppUI:
         txt = (
             f"Work Mode : {config.work_mode}\n"
             f"OCR Engine: {config.ocr_mode}\n"
+            f"OCR Langs : {config.ocr_language}\n"
+            f"AI Cleanup: {'Enabled' if getattr(config, 'enable_ocr_recovery', False) else 'Disabled'}\n"
             f"Main Agent: {config.model}\n"
             f"Think Time: {config.thinking_delay}s | Loop Delay: {config.loop_delay}s\n"
             f"Scroll Amt: {config.scroll_amount} notches"
@@ -611,10 +648,6 @@ class AppUI:
         self.local_fallback_cb = ctk.CTkCheckBox(frame, text="Use Local Models as Last-Resort Fallback", variable=self.local_fallback_var, font=PRO_FONT)
         self.local_fallback_cb.pack(fill="x", pady=(5, 5), padx=10)
         
-        self.ocr_recovery_var = ctk.BooleanVar(value=getattr(config, 'enable_ocr_recovery', False))
-        self.ocr_recovery_cb = ctk.CTkCheckBox(frame, text="Enable AI OCR Recovery", variable=self.ocr_recovery_var, font=PRO_FONT)
-        self.ocr_recovery_cb.pack(fill="x", pady=(5, 15), padx=10)
-        ToolTip(self.ocr_recovery_cb, "Intercepts mangled screen text (e.g. c4r) and uses your\nselected AI to perfectly fix typos before answering.\nMay increase processing time per question.")
         
         # Appearance Options
         ctk.CTkLabel(frame, text="Global Appearance & Theme", font=SUBHEADER_FONT).pack(pady=(15, 5))
@@ -677,13 +710,11 @@ class AppUI:
                 return
                 
             config.tesseract_path = self.tesseract_entry.get().strip()
-            config.ocr_language = self.ocr_lang_entry.get().strip() or "eng"
             config.model = self.model_combo.get().strip()
             self.quick_main_combo.set(config.model)
             config.show_step_timings = self.timings_var.get()
             config.save_qa_logs = self.save_logs_var.get()
             config.use_local_as_fallback = self.local_fallback_var.get()
-            config.enable_ocr_recovery = self.ocr_recovery_var.get()
             
             # Apply Appearance
             config.appearance_mode = self.app_mode_combo.get()
