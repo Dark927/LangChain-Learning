@@ -10,12 +10,17 @@ python -m pip install pyinstaller customtkinter pillow pyautogui pytesseract pyp
 
 echo.
 echo [2/4] Generating favicon.ico from logo.svg...
-python repack\svg_to_ico.py logo.svg favicon.ico
+python repack\svg_to_ico.py assets\logo.svg assets\favicon.ico
 
 echo.
 echo [3/4] Compiling Python Code to Standalone Binaries...
 echo (This may take a minute or two...)
-python -m PyInstaller --noconfirm --onedir --windowed --icon="favicon.ico" --add-data "favicon.ico;." --add-data "themes;themes" --name "AutoSolverPro" src\main.py
+python -m PyInstaller --noconfirm --onedir --windowed --icon="assets\favicon.ico" --add-data "assets\favicon.ico;." --add-data "themes;themes" --name "AutoSolverPro" src\main.py
+
+echo.
+echo [Fix] Copying default configurations to dist...
+mkdir "dist\AutoSolverPro\data" 2>nul
+copy "src\data\presets.json" "dist\AutoSolverPro\data\" >nul
 
 echo.
 echo [Fix] Copying missing python3.dll (PyInstaller workaround)...

@@ -23,7 +23,9 @@ class ProviderModel:
     free_tier_note: str = ""
     is_free: bool = True
 
-DYNAMIC_MODELS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "dynamic_models.json")
+def _get_dynamic_models_path() -> str:
+    base_dir = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base_dir, "data", "dynamic_models.json")
 
 
 class ProviderRegistry:
@@ -224,8 +226,9 @@ class ProviderRegistry:
                 pass
 
         if dynamic_list:
-            os.makedirs(os.path.dirname(DYNAMIC_MODELS_FILE), exist_ok=True)
-            with open(DYNAMIC_MODELS_FILE, "w", encoding="utf-8") as f:
+            path = _get_dynamic_models_path()
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
                 json.dump(dynamic_list, f, indent=4)
             cls._load_dynamic_models()
             return len(dynamic_list)
@@ -233,10 +236,11 @@ class ProviderRegistry:
 
     @classmethod
     def _load_dynamic_models(cls):
-        if not os.path.exists(DYNAMIC_MODELS_FILE):
+        path = _get_dynamic_models_path()
+        if not os.path.exists(path):
             return
         try:
-            with open(DYNAMIC_MODELS_FILE, "r", encoding="utf-8") as f:
+            with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             
             # Load dead models to avoid importing known bad models
