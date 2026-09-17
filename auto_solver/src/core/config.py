@@ -62,6 +62,9 @@ class AppConfig:
     # Use locally installed models as a last-resort fallback when all API models fail
     use_local_as_fallback: bool = True
 
+    # Use the primary AI model to intercept and intelligently fix OCR typos (e.g. c4r -> car) before testing
+    enable_ocr_recovery: bool = False
+
 
 
     def _get_data_dir(self):

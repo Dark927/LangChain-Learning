@@ -157,7 +157,16 @@ class Runner:
                     failed_answers = []
                     last_clicked_answer = None
 
-                qa_logger.info(f"QUESTION EXTRACTED:\n{text.strip()}")
+                from core.text_recovery import strip_ui_artifacts, recover_ocr_text_ai
+                
+                # Clean programmatic noise
+                clean_text = strip_ui_artifacts(text)
+                
+                # Optional AI contextual recovery
+                if getattr(config, 'enable_ocr_recovery', False):
+                    clean_text = recover_ocr_text_ai(clean_text, lambda m: self._log(m, "gray"), lambda: self.stop_requested)
+                    
+                qa_logger.info(f"QUESTION EXTRACTED:\n{clean_text.strip()}")
                     
                 # 3. Ask Agent
                 self._set_status("Asking AI")
@@ -166,7 +175,7 @@ class Runner:
                 def agent_live_log(msg):
                     self._log(f"  [AI] {msg}", "gray")
                     
-                answer_text = ask_agent(text, lambda: self.stop_requested, agent_live_log, failed_answers=failed_answers)
+                answer_text = ask_agent(clean_text, lambda: self.stop_requested, agent_live_log, failed_answers=failed_answers)
 
                 if self.stop_requested:
                     break

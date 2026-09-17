@@ -16,6 +16,32 @@ PRO_FONT = ("Segoe UI", 13)
 HEADER_FONT = ("Segoe UI", 22, "bold")
 SUBHEADER_FONT = ("Segoe UI", 14, "bold")
 
+class ToolTip:
+    def __init__(self, widget, text):
+        self.widget = widget
+        self.text = text
+        self.tooltip = None
+        self.widget.bind("<Enter>", self.show_tooltip)
+        self.widget.bind("<Leave>", self.hide_tooltip)
+        
+    def show_tooltip(self, event=None):
+        x = self.widget.winfo_rootx() + 20
+        y = self.widget.winfo_rooty() + 20
+        self.tooltip = tk.Toplevel(self.widget)
+        self.tooltip.wm_overrideredirect(True)
+        self.tooltip.wm_geometry(f"+{x}+{y}")
+        
+        # Use simple label for tooltip
+        label = tk.Label(self.tooltip, text=self.text, justify='left',
+                         background="#2d2d2d", foreground="#e0e0e0", relief='solid', borderwidth=1,
+                         font=("Segoe UI", 10), padx=8, pady=4)
+        label.pack()
+        
+    def hide_tooltip(self, event=None):
+        if self.tooltip:
+            self.tooltip.destroy()
+            self.tooltip = None
+
 def filter_dead_models(models_list):
     import os, json
     dead_path = os.path.join(config._get_data_dir(), "dead_models.json")
@@ -583,7 +609,12 @@ class AppUI:
 
         self.local_fallback_var = ctk.BooleanVar(value=config.use_local_as_fallback)
         self.local_fallback_cb = ctk.CTkCheckBox(frame, text="Use Local Models as Last-Resort Fallback", variable=self.local_fallback_var, font=PRO_FONT)
-        self.local_fallback_cb.pack(fill="x", pady=(5, 15), padx=10)
+        self.local_fallback_cb.pack(fill="x", pady=(5, 5), padx=10)
+        
+        self.ocr_recovery_var = ctk.BooleanVar(value=getattr(config, 'enable_ocr_recovery', False))
+        self.ocr_recovery_cb = ctk.CTkCheckBox(frame, text="Enable AI OCR Recovery", variable=self.ocr_recovery_var, font=PRO_FONT)
+        self.ocr_recovery_cb.pack(fill="x", pady=(5, 15), padx=10)
+        ToolTip(self.ocr_recovery_cb, "Intercepts mangled screen text (e.g. c4r) and uses your\nselected AI to perfectly fix typos before answering.\nMay increase processing time per question.")
         
         # Appearance Options
         ctk.CTkLabel(frame, text="Global Appearance & Theme", font=SUBHEADER_FONT).pack(pady=(15, 5))
@@ -652,6 +683,7 @@ class AppUI:
             config.show_step_timings = self.timings_var.get()
             config.save_qa_logs = self.save_logs_var.get()
             config.use_local_as_fallback = self.local_fallback_var.get()
+            config.enable_ocr_recovery = self.ocr_recovery_var.get()
             
             # Apply Appearance
             config.appearance_mode = self.app_mode_combo.get()

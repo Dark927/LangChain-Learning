@@ -111,6 +111,10 @@ class VisionHandler:
         return full_text, word_boxes
 
     def _normalize_text(self, text: str) -> str:
+        # Strip exact known noise first
+        text = re.sub(r'\b[O0]{2,}\b', '', text)
+        text = re.sub(r'\|\)', '', text)
+        text = re.sub(r'\+:', '', text)
         # Preserve all unicode word characters (including Cyrillic/Ukrainian); strip only punctuation and whitespace
         return re.sub(r'[^\w]', '', text.lower(), flags=re.UNICODE)
 
@@ -153,8 +157,8 @@ class VisionHandler:
                     # Use the center of the first word in the best matching window
                     best_box = window_boxes[0]
                     
-        # If we have a reasonable match (e.g. > 0.6)
-        if best_box and best_score > 0.6:
+        # If we have a reasonable match (lowered to 0.55 to handle clean AI vs mangled screen text)
+        if best_box and best_score > 0.55:
             center_x = best_box["left"] + (best_box["width"] // 2)
             center_y = best_box["top"] + (best_box["height"] // 2)
             abs_x = config.question_region[0] + center_x
